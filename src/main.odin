@@ -49,6 +49,12 @@ main :: proc() {
 		os.exit(1)
 	}
 
+	CHUNK_BUFFER_SIZE :: 64 * 1024
+	string_block = make([dynamic]u8)
+	chunk_buffer := make([]u8, CHUNK_BUFFER_SIZE)
+
+	start_tick := time.tick_now()
+
 	trace_fd, err := os.open(os.args[1])
 	if err != 0 {
 		fmt.printf("Failed to open %s\n", os.args[1])
@@ -59,10 +65,6 @@ main :: proc() {
 		fmt.printf("Failed to get file size for %s\n", os.args[1])
 		os.exit(1)
 	}
-
-	CHUNK_BUFFER_SIZE :: 64 * 1024
-	string_block = make([dynamic]u8)
-	chunk_buffer := make([]u8, CHUNK_BUFFER_SIZE)
 
 	rd_sz, err3 := os.read(trace_fd, chunk_buffer)
 	if err2 != 0 {
@@ -115,6 +117,8 @@ main :: proc() {
 				chunk = chunk_buffer[:rd_sz]
 				break hot_loop
 			case .Finished:
+				duration := time.tick_since(start_tick)
+				fmt.printf("runtime: %f ms\n", time.duration_milliseconds(duration))
 				os.exit(0)
 			}
 		}
