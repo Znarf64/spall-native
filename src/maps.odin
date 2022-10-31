@@ -94,6 +94,7 @@ in_getstr :: #force_inline proc(v: ^[dynamic]u8, s: INStr) -> string {
 	return string(v[s.start:s.start+int(s.len)])
 }
 
+VH_LOAD_FACTOR :: 0.75
 // u32 -> u32 map
 PTEntry :: struct {
 	key: u32,
@@ -112,7 +113,7 @@ vh_init :: proc(allocator := context.allocator) -> ValHash {
 	for i in 0..<len(v.hashes) {
 		v.hashes[i] = -1
 	}
-	v.resize_threshold = i64(f64(len(v.hashes)) * 0.75)
+	v.resize_threshold = i64(f64(len(v.hashes)) * VH_LOAD_FACTOR)
 	return v
 }
 
@@ -145,7 +146,7 @@ vh_grow :: proc(v: ^ValHash) {
 		v.hashes[i] = -1
 	}
 
-	v.resize_threshold = i64(f64(len(v.hashes)) * 0.75)
+	v.resize_threshold = i64(f64(len(v.hashes)) * VH_LOAD_FACTOR)
 	for entry, idx in v.entries {
 		vh_reinsert(v, entry, idx)
 	}
