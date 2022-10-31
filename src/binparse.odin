@@ -21,14 +21,15 @@ get_next_event :: proc(trace: ^Trace, chunk: []u8, temp_ev: ^TempEvent) -> Binar
 		return .PartialRead
 	}
 
-	type := (^spall.Event_Type)(raw_data(chunk))^
+	data_start := chunk[chunk_pos(p):]
+	type := (^spall.Event_Type)(raw_data(data_start))^
 	#partial switch type {
 	case .Begin:
 		event_sz := i64(size_of(spall.Begin_Event))
 		if chunk_pos(p) + event_sz > i64(len(chunk)) {
 			return .PartialRead
 		}
-		event := (^spall.Begin_Event)(raw_data(chunk))
+		event := (^spall.Begin_Event)(raw_data(data_start))
 
 		event_tail := i64(event.name_len) + i64(event.args_len)
 		if (chunk_pos(p) + event_sz + event_tail) > i64(len(chunk)) {
@@ -50,7 +51,7 @@ get_next_event :: proc(trace: ^Trace, chunk: []u8, temp_ev: ^TempEvent) -> Binar
 		if chunk_pos(p) + event_sz > i64(len(chunk)) {
 			return .PartialRead
 		}
-		event := (^spall.End_Event)(raw_data(chunk))
+		event := (^spall.End_Event)(raw_data(data_start))
 
 		temp_ev.type = .End
 		temp_ev.timestamp = event.time
@@ -100,12 +101,9 @@ parse_binary :: proc(trace: ^Trace, fd: os.Handle, chunk_buffer: []u8, read_size
 	p := &trace.parser
 
 	full_chunk := chunk_buffer[:read_size]
-
 	for p.pos < total_size {
-		chunk := full_chunk[chunk_pos(p):]
-
 		mem.zero(&temp_ev, size_of(TempEvent))
-		state := get_next_event(trace, chunk, &temp_ev)
+		state := get_next_event(trace, full_chunk, &temp_ev)
 		#partial switch state {
 		case .PartialRead:
 			p.offset = p.pos
