@@ -402,19 +402,14 @@ load_file :: proc(filename: string) -> Trace {
 	}
 
 	duration := time.tick_since(start_time)
-	fmt.printf("parse / ingest events: %f ms\n", time.duration_milliseconds(duration))
+	fmt.printf("parse config -- %f ms\n", time.duration_milliseconds(duration))
 	
 	generate_color_choices(&trace)
 
 	start_time = time.tick_now()
 	chunk_events(&trace)
 	duration = time.tick_since(start_time)
-	fmt.printf("chunk events: %f ms\n", time.duration_milliseconds(duration))
-
-	start_time = time.tick_now()
-	generate_selftimes(&trace)
-	duration = time.tick_since(start_time)
-	fmt.printf("generate self-times: %f ms\n", time.duration_milliseconds(duration))
+	fmt.printf("generate spatial partitions -- %f ms\n", time.duration_milliseconds(duration))
 
 	return trace
 }

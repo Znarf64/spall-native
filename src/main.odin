@@ -194,7 +194,6 @@ main :: proc() {
 
 		gl.BufferData(gl.ARRAY_BUFFER, len(rects)*size_of(rects[0]), raw_data(rects), gl.DYNAMIC_DRAW)
 		gl.DrawElementsInstanced(gl.TRIANGLES, i32(len(indices)), gl.UNSIGNED_SHORT, nil, i32(len(rects)))
-
 		SDL.GL_SwapWindow(window)
 	}
 }
