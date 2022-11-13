@@ -87,7 +87,23 @@ float sdOrientedBox(in vec2 p, in vec2 a, in vec2 b, float thick) {
     return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);    
 }
 
-vec3 fromLinear(vec3 linearRGB)
+float fromLinear(float linearRGB)
+{
+    bool cutoff = (linearRGB < float(0.0031308));
+    float higher = float(1.055)*pow(linearRGB, float(1.0/2.4)) - float(0.055);
+    float lower = linearRGB * float(12.92);
+
+    return mix(higher, lower, cutoff);
+}
+float toLinear(float sRGB)
+{
+    bool cutoff = (sRGB < float(0.04045));
+    float higher = pow((sRGB + float(0.055))/float(1.055), float(2.4));
+    float lower = sRGB/float(12.92);
+
+    return mix(higher, lower, cutoff);
+}
+vec3 fromLinear3(vec3 linearRGB)
 {
     bvec3 cutoff = lessThan(linearRGB, vec3(0.0031308));
     vec3 higher = vec3(1.055)*pow(linearRGB, vec3(1.0/2.4)) - vec3(0.055);
@@ -95,7 +111,7 @@ vec3 fromLinear(vec3 linearRGB)
 
     return mix(higher, lower, cutoff);
 }
-vec3 toLinear(vec3 sRGB)
+vec3 toLinear3(vec3 sRGB)
 {
     bvec3 cutoff = lessThan(sRGB, vec3(0.04045));
     vec3 higher = pow((sRGB + vec3(0.055))/vec3(1.055), vec3(2.4));
@@ -117,14 +133,14 @@ void main() {
 		float alpha = 1.0 - smoothstep(-min(2.0, width - 0.5), 0.0, d); 
 		out_color = vec4(v_color.rgb, v_color.a * alpha);
 
-		out_color.rgb = toLinear(out_color.rgb);
+		out_color.rgb = toLinear3(out_color.rgb);
 		out_color.rgb *= out_color.a;
 
 	// if rect
 	} else if (v_uv.x < 0) {
 		out_color = v_color;
 
-		out_color.rgb = toLinear(out_color.rgb);
+		out_color.rgb = toLinear3(out_color.rgb);
 		out_color.rgb *= out_color.a;
 
 	// if textured rect
@@ -134,6 +150,12 @@ void main() {
 		scaled_idx.y *= v_rect_pos.w;
 		vec2 uv_pos = scaled_idx;
 		out_color = vec4(v_color.rgb, v_color.a * texture(font_tex, uv_pos).a);
+
+		// Hack to increase the font weight of dark text.
+		// It may be mitigating this: https://en.wikipedia.org/wiki/Irradiation_illusion
+		float avg = (v_color.r + v_color.g + v_color.b) / 3;
+		out_color.a = mix(fromLinear(out_color.a), out_color.a, avg);
+
 		out_color.rgb *= out_color.a;
 
 	}

@@ -170,7 +170,7 @@ grab_fonts :: proc(names: []string, sizes: []f64) -> []^SDL_TTF.Font {
 		for size in sizes {
 			font := SDL_TTF.OpenFont(full_path_cstring, i32(size))
 			if font == nil {
-				fmt.printf("Failed to open %s @ %d\n", full_path_cstring, size)
+				fmt.printf("Failed to open %s @ %f\n", full_path_cstring, size)
 				push_fatal(SpallError.Bug)
 			}
 
