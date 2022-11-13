@@ -228,6 +228,7 @@ main :: proc() {
 
 	SDL.GL_SetAttribute(.MULTISAMPLEBUFFERS, 1)
 	SDL.GL_SetAttribute(.MULTISAMPLESAMPLES, 8)
+	SDL.GL_SetAttribute(SDL.GLattr.FRAMEBUFFER_SRGB_CAPABLE, 1)
 
 	SDL.SetHint(SDL.HINT_MOUSE_FOCUS_CLICKTHROUGH, "1")
 
@@ -247,6 +248,7 @@ main :: proc() {
 	gl.Enable(gl.BLEND)
 	gl.BlendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
 	gl.Enable(gl.MULTISAMPLE)
+	gl.Enable(gl.FRAMEBUFFER_SRGB)
 
 	real_window_width: i32
 	real_window_height: i32

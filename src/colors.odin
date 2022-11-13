@@ -54,7 +54,7 @@ default_colors :: proc "contextless" (is_dark: bool) {
 		toolbar_text_color   = BVec4{0xF5, 0xF5, 0xF5, 255}
 
 		graph_color      = BVec4{180, 180, 180, 255}
-		highlight_color  = BVec4{  0,   0, 255,  32}
+		highlight_color  = BVec4{ 64,  64, 255,   7}
 		wide_rect_color  = BVec4{  0, 255,   0,   0}
 		wide_bg_color    = BVec4{  0,   0,   0, 255}
 		shadow_color     = BVec4{  0,   0,   0, 120}

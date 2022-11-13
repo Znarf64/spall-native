@@ -87,6 +87,23 @@ float sdOrientedBox(in vec2 p, in vec2 a, in vec2 b, float thick) {
     return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);    
 }
 
+vec3 fromLinear(vec3 linearRGB)
+{
+    bvec3 cutoff = lessThan(linearRGB, vec3(0.0031308));
+    vec3 higher = vec3(1.055)*pow(linearRGB, vec3(1.0/2.4)) - vec3(0.055);
+    vec3 lower = linearRGB * vec3(12.92);
+
+    return mix(higher, lower, cutoff);
+}
+vec3 toLinear(vec3 sRGB)
+{
+    bvec3 cutoff = lessThan(sRGB, vec3(0.04045));
+    vec3 higher = pow((sRGB + vec3(0.055))/vec3(1.055), vec3(2.4));
+    vec3 lower = sRGB/vec3(12.92);
+
+    return mix(higher, lower, cutoff);
+}
+
 void main() {
 	// if line
 	if (v_uv.y < 0) {
@@ -100,12 +117,14 @@ void main() {
 		float alpha = 1.0 - smoothstep(-min(2.0, width - 0.5), 0.0, d); 
 		out_color = vec4(v_color.rgb, v_color.a * alpha);
 
+		out_color.rgb = toLinear(out_color.rgb);
 		out_color.rgb *= out_color.a;
 
 	// if rect
 	} else if (v_uv.x < 0) {
 		out_color = v_color;
 
+		out_color.rgb = toLinear(out_color.rgb);
 		out_color.rgb *= out_color.a;
 
 	// if textured rect
