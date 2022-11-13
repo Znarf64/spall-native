@@ -199,8 +199,6 @@ threaded_config_load :: proc(data: rawptr) {
 	start_time := time.tick_now()
 	load_file(trace, filename)
 	duration := time.tick_since(start_time)
-
-	fmt.printf("Loaded %s\n", trace.file_name)
 	fmt.printf("runtime: %f ms, got %d events\n", time.duration_milliseconds(duration), trace.event_count)
 
 	loading_config = false

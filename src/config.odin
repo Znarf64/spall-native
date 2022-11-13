@@ -362,12 +362,13 @@ load_file :: proc(trace: ^Trace, file_name: string) {
 	if err2 != 0 {
 		push_fatal(SpallError.InvalidFile)
 	}
+	trace.total_size = total_size
+	fmt.printf("Loading %s, %f MB\n", trace.base_name, f64(trace.total_size) / 1024 / 1024)
 
 	rd_sz, err3 := os.read(trace_fd, chunk_buffer)
 	if err3 != 0 {
 		push_fatal(SpallError.InvalidFile)
 	}
-	trace.total_size = total_size
 
 	// parse header
 	full_chunk := chunk_buffer[:rd_sz]
