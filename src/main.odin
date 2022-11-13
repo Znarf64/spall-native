@@ -91,6 +91,8 @@ fps_history: queue.Queue(f64)
 lru_text_cache: lru.Cache(LRU_Key, LRU_Text)
 
 
+fullscreen := false
+
 t               : f64
 multiselect_t   : f64
 greyanim_t      : f32
@@ -353,6 +355,8 @@ main :: proc() {
 		greyanim_t = f32((t - multiselect_t) * 5)
 		greymotion = ease_in_out(greyanim_t)
 
+		should_toggle_fullscreen := false
+
 		// event polling
 		event: SDL.Event = ---
 		first := true
@@ -376,6 +380,12 @@ main :: proc() {
 				#partial switch event.key.keysym.sym {
 				case .LSHIFT:
 					shift_down = true
+				case .RETURN:
+					if event.key.keysym.mod & SDL.KMOD_ALT != (SDL.Keymod{}) {
+						should_toggle_fullscreen = true
+					}
+				case .F11:
+					should_toggle_fullscreen = true
 				}
 			case .KEYUP:
 				#partial switch event.key.keysym.sym {
@@ -433,6 +443,20 @@ main :: proc() {
 				start_trace = strings.clone_from_cstring(event.drop.file)
 				SDL.free(rawptr(event.drop.file))
 			}
+		}
+
+		if should_toggle_fullscreen {
+			fullscreen = !fullscreen
+			if fullscreen {
+				SDL.SetWindowFullscreen(window, SDL.WINDOW_FULLSCREEN_DESKTOP)
+			} else {
+				SDL.SetWindowFullscreen(window, SDL.WindowFlags{})
+			}
+			iw : i32
+			ih : i32
+			SDL.GetWindowSize(window, &iw, &ih)
+			width = f64(iw)
+			height = f64(ih)
 		}
 
 		resize(&rects, 0)
