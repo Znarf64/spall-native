@@ -120,9 +120,9 @@ stat_fmt :: proc(time: f64) -> string {
 	}
 }
 
-my_write_float :: proc(b: ^strings.Builder, f: f64, fmt: byte, prec, bit_size: int) -> (n: int) {
+my_write_float :: proc(b: ^strings.Builder, f: f64, prec: int) -> (n: int) {
 	buf: [384]byte
-	s := strconv.append_float(buf[1:], f, fmt, prec, bit_size)
+	s := strconv.append_float(buf[1:], f, 'f', prec, 8*size_of(f))
 	if s[0] == '+' {
 		s = s[1:]
 	}
@@ -135,28 +135,28 @@ time_fmt :: proc(time: f64) -> string {
 	mins := math.floor(math.mod(time / ONE_MINUTE, 60))
 	if mins > 0 && mins < 60 {
 		strings.write_byte(&b, ' ')
-		my_write_float(&b, mins, 'f', 0, 8*size_of(mins))
+		my_write_float(&b, mins, 0)
 		strings.write_byte(&b, 'm')
 	} 
 
 	secs := math.floor(math.mod(time / ONE_SECOND, 60))
 	if secs > 0 && secs < 60 {
 		strings.write_byte(&b, ' ')
-		my_write_float(&b, secs, 'f', 0, 8*size_of(secs))
+		my_write_float(&b, secs, 0)
 		strings.write_byte(&b, 's')
 	} 
 
 	millis := math.floor(math.mod(time / ONE_MILLI, 1000))
 	if millis > 0 && millis < 1000 {
 		strings.write_byte(&b, ' ')
-		my_write_float(&b, millis, 'f', 0, 8*size_of(millis))
+		my_write_float(&b, millis, 0)
 		strings.write_string(&b, "ms")
 	} 
 
 	micros := math.floor(math.mod(time, 1000))
 	if micros > 0 && micros < 1000 {
 		strings.write_byte(&b, ' ')
-		my_write_float(&b, micros, 'f', 0, 8*size_of(micros))
+		my_write_float(&b, micros, 0)
 		strings.write_string(&b, "μs")
 	}
 
@@ -164,7 +164,7 @@ time_fmt :: proc(time: f64) -> string {
 	nanos = math.floor(nanos * 1000)
 	if (nanos > 0 && nanos < 1000) || time == 0 {
 		strings.write_byte(&b, ' ')
-		my_write_float(&b, nanos, 'f', 0, 8*size_of(nanos))
+		my_write_float(&b, nanos, 0)
 		strings.write_string(&b, "ns")
 	}
 
@@ -172,7 +172,7 @@ time_fmt :: proc(time: f64) -> string {
 	picos = math.floor(picos * 1000000)
 	if (picos > 0 && picos < 1000) {
 		strings.write_byte(&b, ' ')
-		my_write_float(&b, picos, 'f', 0, 8*size_of(picos))
+		my_write_float(&b, picos, 0)
 		strings.write_string(&b, "ps")
 	}
 
@@ -220,7 +220,8 @@ measure_fmt :: proc(time: f64) -> string {
 				strings.write_byte(&b, ' ')
 			}
 
-			fmt.sbprintf(&b, "%.0f%s", clump.value, clump.unit)
+			my_write_float(&b, clump.value, 0)
+			strings.write_string(&b, clump.unit)
 		}
 	}
 
