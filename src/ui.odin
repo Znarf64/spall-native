@@ -265,6 +265,17 @@ draw_debug :: proc(rects: ^[dynamic]DrawRect, width, text_y, x_subpad: f64, grap
 	events_str := fmt.tprintf("Event Count: %d", rect_count - bucket_count)
 	events_txt_width := measure_text(events_str, .PSize, .MonoFont)
 	draw_text(rects, events_str, Vec2{width - events_txt_width - x_subpad, prev_line(&y, em)}, .PSize, .MonoFont, text_color2)
+
+	cache_hit_str := fmt.tprintf("TTF Cache Hits: %d", cache_hits_this_frame)
+	cache_hit_txt_width := measure_text(cache_hit_str, .PSize, .MonoFont)
+	draw_text(rects, cache_hit_str, Vec2{width - cache_hit_txt_width - x_subpad, prev_line(&y, em)}, .PSize, .MonoFont, text_color2)
+
+	cache_miss_str := fmt.tprintf("TTF Cache Misses: %d", cache_misses_this_frame)
+	cache_miss_txt_width := measure_text(cache_miss_str, .PSize, .MonoFont)
+	draw_text(rects, cache_miss_str, Vec2{width - cache_miss_txt_width - x_subpad, prev_line(&y, em)}, .PSize, .MonoFont, text_color2)
+
+	cache_hits_this_frame = 0
+	cache_misses_this_frame = 0
 }
 
 draw_rect_tooltip :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, dpr: f64) {

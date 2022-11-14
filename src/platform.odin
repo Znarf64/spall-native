@@ -80,6 +80,9 @@ rm_text_cache :: proc(key: LRU_Key, value: LRU_Text, udata: rawptr) {
 	gl.DeleteTextures(1, &handle)
 }
 
+cache_hits_this_frame := 0
+cache_misses_this_frame := 0
+
 get_text_cache :: proc(str: string, scale: FontSize, font_type: FontType) -> LRU_Text {
 	text_blob, ok := lru.get(&lru_text_cache, LRU_Key{ scale, font_type, str })
 	if !ok {
@@ -109,6 +112,9 @@ get_text_cache :: proc(str: string, scale: FontSize, font_type: FontType) -> LRU
 
 		text_blob = LRU_Text{ handle, width, height }
 		lru.set(&lru_text_cache, LRU_Key{ scale, font_type, long_str }, text_blob)
+		cache_misses_this_frame += 1
+	} else {
+		cache_hits_this_frame += 1
 	}
 
 	return text_blob
