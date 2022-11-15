@@ -934,7 +934,7 @@ json_push_event :: proc(trace: ^Trace, process_id, thread_id: u32, event: ^Event
 	trace.total_min_time = min(trace.total_min_time, event.timestamp)
 	trace.total_max_time = max(trace.total_max_time, event.timestamp + event.duration)
 
-	append(&t.events, event^)
+	append_event(&t.events, event)
 	return p_idx, t_idx, len(t.events)-1
 }
 

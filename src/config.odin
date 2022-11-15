@@ -4,6 +4,7 @@ import "core:os"
 import "core:fmt"
 import "core:slice"
 import "core:time"
+import "core:runtime"
 import "core:path/filepath"
 
 import "formats:spall"
@@ -117,6 +118,22 @@ find_idx :: proc(trace: ^Trace, events: []Event, val: f64) -> int {
 	}
 
 	return low
+}
+
+append_event :: proc(events: ^[dynamic]Event, ev: ^Event, loc := #caller_location) {
+	if cap(events) < len(events)+1 {
+		cap := 2 * cap(events) + max(8, 1)
+		_ = reserve(events, cap, loc)
+	}
+
+	if cap(events)-len(events) > 0 {
+		a := (^runtime.Raw_Dynamic_Array)(events)
+		data := ([^]Event)(a.data)
+		data[a.len] = ev^
+		a.len += 1
+	}
+
+	return
 }
 
 gen_event_color :: proc(trace: ^Trace, events: []Event, thread_max: f64) -> (FVec3, f64) {
