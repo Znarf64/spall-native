@@ -111,15 +111,11 @@ loading_config := false
 post_loading := true
 
 // gl-rect nonsense
-idx_pos := []glm.vec2{ 
+idx_pos := [?]glm.vec2{ 
 	{0.0, 0.0}, 
 	{1.0, 0.0}, 
 	{0.0, 1.0}, 
 	{1.0, 1.0}
-}
-indices := []u16{
-	0, 1, 2,
-	2, 1, 3,
 }
 
 @(cold)
@@ -307,16 +303,9 @@ main :: proc() {
 	rect_points_buffer: u32
 	gl.GenBuffers(1, &rect_points_buffer)
 	gl.BindBuffer(gl.ARRAY_BUFFER, rect_points_buffer)
-	gl.BufferData(gl.ARRAY_BUFFER, len(idx_pos)*size_of(idx_pos[0]), raw_data(idx_pos), gl.STATIC_DRAW)
+	gl.BufferData(gl.ARRAY_BUFFER, len(idx_pos)*size_of(idx_pos[0]), raw_data(idx_pos[:]), gl.STATIC_DRAW)
 	gl.EnableVertexAttribArray(u32(VertAttrs.IdxPos))
 	gl.VertexAttribPointer(u32(VertAttrs.IdxPos), 2, gl.FLOAT, false, 0, 0)
-
-
-	// Set up rect index buffer
-	rect_idx_buffer: u32
-	gl.GenBuffers(1, &rect_idx_buffer)
-	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, rect_idx_buffer)
-	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(indices)*size_of(indices[0]), raw_data(indices), gl.STATIC_DRAW)
 
 	ch_width = measure_text("a", .PSize, .MonoFont)
 	
@@ -518,9 +507,7 @@ main :: proc() {
 				), loading_block_color)
 			}
 
-			gl.BufferData(gl.ARRAY_BUFFER, len(rects)*size_of(rects[0]), raw_data(rects), gl.DYNAMIC_DRAW)
-			gl.DrawElementsInstanced(gl.TRIANGLES, i32(len(indices)), gl.UNSIGNED_SHORT, nil, i32(len(rects)))
-
+			flush_rects(&rects)
 			SDL.GL_SwapWindow(window)
 			continue
 		}

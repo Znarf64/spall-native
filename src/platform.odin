@@ -169,7 +169,7 @@ flush_text_batch :: proc(text_rects: ^[dynamic]TextRect) {
 		h := f32(f64(text_blob.height) / dpr)
 		draw_rect := DrawRect{FVec4{rect.pos.x, rect.pos.y, w, h}, rect.color, FVec2{0.0, 0.0}}
 		gl.BufferData(gl.ARRAY_BUFFER, size_of(draw_rect), &draw_rect, gl.DYNAMIC_DRAW)
-		gl.DrawElementsInstanced(gl.TRIANGLES, i32(len(indices)), gl.UNSIGNED_SHORT, nil, 1)
+		gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, 1)
 		delete(rect.str)
 	}
 
@@ -178,7 +178,7 @@ flush_text_batch :: proc(text_rects: ^[dynamic]TextRect) {
 
 flush_rects :: proc(rects: ^[dynamic]DrawRect) {
 	gl.BufferData(gl.ARRAY_BUFFER, len(rects)*size_of(rects[0]), raw_data(rects[:]), gl.DYNAMIC_DRAW)
-	gl.DrawElementsInstanced(gl.TRIANGLES, i32(len(indices)), gl.UNSIGNED_SHORT, nil, i32(len(rects)))
+	gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, i32(len(rects)))
 	resize(rects, 0)
 }
 
