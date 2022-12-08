@@ -42,7 +42,7 @@ button :: proc(rects: ^[dynamic]DrawRect, in_rect: Rect, label_text, tooltip_tex
 	draw_text(rects, label_text, 
 		Vec2{
 			in_rect.pos.x + (in_rect.size.x / 2) - (label_width / 2), 
-			in_rect.pos.y + (in_rect.size.y / 2) - (label_height / 2)
+			in_rect.pos.y + (in_rect.size.y / 2) - (label_height / 2),
 		}, .PSize, font, toolbar_text_color)
 
 	if pt_in_rect(mouse_pos, in_rect) {
@@ -1007,7 +1007,7 @@ draw_topbars :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, width, height, di
 				draw_text(rects, time_str, 
 					Vec2{
 						start_x + x_off - (text_width / 2),
-						toolbar_height + (time_bar_height / 2) - (em / 2)
+						toolbar_height + (time_bar_height / 2) - (em / 2),
 					}, .PSize, .DefaultFont, text_color)
 				line_start_y = toolbar_height + (time_bar_height / 2) - (em / 2) + p_height
 			} else {
@@ -1346,7 +1346,7 @@ process_multiselect :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, pan_delta:
 				width_text, 
 				Vec2{
 					text_bg_rect.pos.x + (em / 2), 
-					text_bg_rect.pos.y + (p_height / 2)
+					text_bg_rect.pos.y + (p_height / 2),
 				}, 
 				.PSize,
 				.MonoFont,

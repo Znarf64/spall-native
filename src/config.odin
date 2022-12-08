@@ -23,7 +23,7 @@ real_pos :: proc(p: ^Parser) -> i64 { return p.pos }
 chunk_pos :: proc(p: ^Parser) -> i64 { return p.pos - p.offset }
 init_parser :: proc() -> Parser {
 	p := Parser{
-		intern = in_init()
+		intern = in_init(),
 	}
 	return p
 }

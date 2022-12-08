@@ -1031,7 +1031,7 @@ json_process_events :: proc(trace: ^Trace) {
 				cur_depth := ev_stack.len - 1
 				if cur_depth >= len(tm.depths) {
 					append(&tm.depths, Depth{
-						events = make([dynamic]Event)
+						events = make([dynamic]Event),
 					})
 				}
 				append(&depth_arr, cur_depth)

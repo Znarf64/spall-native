@@ -88,7 +88,7 @@ bin_push_event :: proc(trace: ^Trace, process_id, thread_id: u32, event: ^Event)
 
 	if int(t.current_depth) >= len(t.depths) {
 		depth := Depth{
-			events = make([dynamic]Event)
+			events = make([dynamic]Event),
 		}
 		append(&t.depths, depth)
 	}

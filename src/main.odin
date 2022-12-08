@@ -115,7 +115,7 @@ idx_pos := [?]glm.vec2{
 	{0.0, 0.0}, 
 	{1.0, 0.0}, 
 	{0.0, 1.0}, 
-	{1.0, 1.0}
+	{1.0, 1.0},
 }
 
 @(cold)
@@ -471,7 +471,7 @@ main :: proc() {
 			f32(bg_color2.x) / 255,
 			f32(bg_color2.y) / 255, 
 			f32(bg_color2.z) / 255,
-			f32(bg_color2.w) / 255
+			f32(bg_color2.w) / 255,
 		)
 		gl.Clear(gl.COLOR_BUFFER_BIT)
 
@@ -487,7 +487,7 @@ main :: proc() {
 				(width / 2) - (load_box.size.x / 2) - pad_size, 
 				(height / 2) - (load_box.size.y / 2) - pad_size, 
 				load_box.size.x + pad_size, 
-				load_box.size.y + pad_size
+				load_box.size.y + pad_size,
 			)
 
 			draw_rect(&rects, load_box, BVec4{30, 30, 30, 255})
@@ -503,7 +503,7 @@ main :: proc() {
 					start_x + (cur_x * chunk_size), 
 					start_y + (cur_y * chunk_size), 
 					chunk_size - pad_size, 
-					chunk_size - pad_size
+					chunk_size - pad_size,
 				), loading_block_color)
 			}
 

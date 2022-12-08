@@ -32,7 +32,7 @@ rect_tooltip_stats_color := BVec4{}
 ColorMode :: enum {
 	Dark,
 	Light,
-	Auto
+	Auto,
 }
 
 default_colors :: proc "contextless" (is_dark: bool) {
