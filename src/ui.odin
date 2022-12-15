@@ -57,11 +57,88 @@ button :: proc(rects: ^[dynamic]DrawRect, in_rect: Rect, label_text, tooltip_tex
 	return false
 }
 
+draw_histogram :: proc(rects: ^[dynamic]DrawRect, header: string, history: []f64, pos: Vec2, graph_size: f64) {
+	line_width : f64 = 1
+	graph_edge_pad : f64 = 2 * em
+	line_gap := (em / 1.5)
+
+	temp_history := make([]f64, len(history), context.temp_allocator)
+
+	max_val : f64 = 0
+	min_val : f64 = 1e5000
+	for entry, i in history {
+		temp_history[i] = math.log2_f64(entry + 1)
+
+		max_val = max(max_val, temp_history[i])
+		min_val = min(min_val, temp_history[i])
+	}
+	max_range := max_val - min_val
+
+	text_width := measure_text(header, .PSize, .DefaultFont)
+	center_offset := (graph_size / 2) - (text_width / 2)
+	draw_text(rects, header, Vec2{pos.x + center_offset, pos.y}, .PSize, .DefaultFont, text_color)
+
+	graph_top := pos.y + em + line_gap
+	draw_rect(rects, rect(pos.x, graph_top, graph_size, graph_size), bg_color2)
+	draw_rect_outline(rects, rect(pos.x, graph_top, graph_size, graph_size), 2, outline_color)
+
+	if len(temp_history) > 1 {
+		buf: [384]byte
+		b := strings.builder_from_bytes(buf[:])
+
+		high_height := graph_top + graph_edge_pad - (em / 2)
+		low_height := graph_top + graph_size - graph_edge_pad - (em / 2)
+
+		tac_count := 5
+		for i := 0; i < tac_count; i += 1 {
+			cur_perc := f64(i) / f64(tac_count - 1)
+			cur_val := math.pow(2, math.lerp(min_val, max_val, cur_perc))
+			cur_height := math.lerp(low_height, high_height, cur_perc)
+
+			strings.builder_reset(&b)
+			my_write_float(&b, cur_val, 3)
+			cur_str := strings.to_string(b)
+			cur_width := measure_text(cur_str, .PSize, .DefaultFont) + line_gap
+			draw_text(rects, cur_str, Vec2{(pos.x - 5) - cur_width, cur_height}, .PSize, .DefaultFont, text_color)
+
+			draw_line(rects, Vec2{pos.x - 5, cur_height + (em / 2)}, Vec2{pos.x + 5, cur_height + (em / 2)}, 1, graph_color)
+		}
+	}
+
+	graph_y_bounds := graph_size - (graph_edge_pad * 2)
+	graph_x_bounds := graph_size - graph_edge_pad
+
+	last_x : f64 = 0
+	last_y : f64 = 0
+	for entry, i in temp_history {
+
+		point_x_offset : f64 = 0
+		if len(temp_history) != 0 {
+			point_x_offset = f64(i) * (graph_x_bounds / f64(len(temp_history)))
+		}
+
+		point_y_offset : f64 = 0
+		if max_range != 0 {
+			point_y_offset = f64(entry - min_val) * (graph_y_bounds / f64(max_range))
+		}
+
+		point_x := pos.x + point_x_offset + (graph_edge_pad / 2)
+		point_y := graph_top + graph_size - point_y_offset - graph_edge_pad
+
+		if len(temp_history) > 1  && i > 0 {
+			draw_line(rects, Vec2{last_x, last_y}, Vec2{point_x, point_y}, line_width, graph_color)
+		}
+
+		last_x = point_x
+		last_y = point_y
+	}
+}
+
 draw_graph :: proc(rects: ^[dynamic]DrawRect, header: string, history: ^queue.Queue(f64), pos: Vec2) {
 	line_width : f64 = 1
 	graph_edge_pad : f64 = 2 * em
 	line_gap := (em / 1.5)
-	graph_size: f64 = 500
+	graph_size: f64 = 150
 
 	max_val : f64 = 0
 	min_val : f64 = 1e5000
@@ -1126,6 +1203,7 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, info_pane_y, info_p
 			y += info_pane_scroll
 		}
 
+		first_stat := true
 		stat_idx := 0
 		last_pos := 0.0
 		stat_loop: for i := 0; i < len(trace.stats.entries); i += 1 {
@@ -1185,14 +1263,19 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, info_pane_y, info_p
 			draw_rect(rects, dr, BVec4{u8(tmp_color.x), u8(tmp_color.y), u8(tmp_color.z), 255})
 			draw_text(rects, name_str, Vec2{cursor, y_before + (em / 3)}, .PSize, .MonoFont, text_color)
 
-			history : queue.Queue(f64);
-			queue.init(&history, 100, context.temp_allocator);
-			for it in stat.hist {
-				queue.push_back(&history, math.log2_f64(f64(it + 1)))
+			if first_stat {
+				histogram_height := 250.0
+				line_gap := (em / 1.5)
+				edge_gap := (em / 2)
+				pos := Vec2{
+					(graph_rect.pos.x + graph_rect.size.x) - histogram_height - edge_gap,
+					info_pane_y - histogram_height - (em + line_gap) - edge_gap,
+				}
+				draw_histogram(rects, name_str, stat.hist[:], pos, histogram_height)
 			}
-			draw_graph(rects, name_str, &history, Vec2{cursor + 300, y_before - 700})
 
 			next_line(&y, em)
+			first_stat = false
 		}
 
 		y = header_start
@@ -1499,17 +1582,17 @@ process_multiselect :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, pan_delta:
 				name := in_getstr(&trace.string_block, ev.name)
 				s, ok := sm_get(&trace.stats, ev.name)
 
-				assert(duration <= s.max_time);
+				assert(duration <= s.max_time)
 				assert(s.max_time - s.min_time >= 0)
 				if (s.max_time - s.min_time <= 0) {
-					s.hist[50] += 1;
+					s.hist[50] += 1
 				} else {
 					t := (duration - s.min_time) / (s.max_time - s.min_time)
 					if t <= 0 { t = 0 }
 					if t >= 1 { t = 1 }
 					t *= 99
 					assert(t < 100)
-					s.hist[u32(t)] += 1;
+					s.hist[u32(t)] += 1
 				}
 				// s.hist[u32(((s.total_time / f64(s.count) - s.min_time) / (s.max_time - s.min_time)) * 99)] = s.count;
 			}
@@ -1599,7 +1682,7 @@ process_inputs :: proc(trace: ^Trace, stat_pane, mini_graph_rect: Rect, dt, disp
 
 		info_pane_scroll += (info_pane_scroll_vel * dt)
 		info_pane_scroll_vel *= math.pow(0.000001, dt)
-		info_pane_scroll = min(info_pane_scroll, em * 8.5)
+		info_pane_scroll = min(info_pane_scroll, 0)
 
 		cam.current_scale += (cam.target_scale - cam.current_scale) * (1 - math.pow(math.pow_f64(0.1, 12), (dt)))
 		cam.current_scale = min(max(cam.current_scale, min_scale), max_scale)
