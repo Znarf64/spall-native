@@ -94,7 +94,6 @@ draw_histogram :: proc(rects: ^[dynamic]DrawRect, header: string, stat: ^Stats, 
 		buf: [384]byte
 		b := strings.builder_from_bytes(buf[:])
 
-
 		x_tac_count := 5
 		for i := 0; i < x_tac_count; i += 1 {
 			cur_perc := f64(i) / f64(x_tac_count - 1)
@@ -1227,7 +1226,6 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, info_pane_y, info_p
 			y += info_pane_scroll
 		}
 
-		first_stat := true
 		stat_idx := 0
 		last_pos := 0.0
 		stat_loop: for i := 0; i < len(trace.stats.entries); i += 1 {
@@ -1245,6 +1243,23 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, info_pane_y, info_p
 				break stat_loop
 			}
 			last_pos = y
+
+			y_before   := y - (em / 2)
+			y_after    := y_before
+			next_line(&y_after, em)
+
+			click_rect := rect(0, y_before, width, 2 * em)
+			if pt_in_rect(mouse_pos, click_rect) {
+				set_cursor("pointer")
+			}
+
+			if clicked && pt_in_rect(clicked_pos, click_rect) {
+				selected_func = name
+			}
+
+			if selected_func.start == name.start {
+				draw_rect(rects, click_rect, highlight_color)
+			}
 
 			cursor = x_subpad
 
@@ -1268,15 +1283,9 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, info_pane_y, info_p
 				draw_text(rects, total_perc_text, Vec2{cursor, y}, .PSize, .MonoFont, text_color2); cursor += column_gap + full_perc_width
 			}
 
-
 			text_outf(rects, &cursor, y, min_text, text_color2);   cursor += column_gap
 			text_outf(rects, &cursor, y, avg_text, text_color2);   cursor += column_gap
 			text_outf(rects, &cursor, y, max_text, text_color2);   cursor += column_gap
-
-			y_before   := y - (em / 2)
-			y_after    := y_before
-			next_line(&y_after, em)
-
 
 			dr := rect(cursor, y_before, (display_width - cursor - column_gap) * stat.total_time / full_time, y_after - y_before)
 			cursor += column_gap / 2
@@ -1287,19 +1296,23 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, info_pane_y, info_p
 			draw_rect(rects, dr, BVec4{u8(tmp_color.x), u8(tmp_color.y), u8(tmp_color.z), 255})
 			draw_text(rects, name_str, Vec2{cursor, y_before + (em / 3)}, .PSize, .MonoFont, text_color)
 
-			if first_stat {
-				histogram_height := 250.0
-				line_gap := (em / 1.5)
-				edge_gap := (em / 2)
-				pos := Vec2{
-					(graph_rect.pos.x + graph_rect.size.x) - histogram_height - edge_gap,
-					info_pane_y - histogram_height - ((em + line_gap) * 2) - edge_gap,
-				}
-				draw_histogram(rects, name_str, &stat, pos, histogram_height)
+			next_line(&y, em)
+		}
+
+		if selected_func.start != -1 {
+			histogram_height := 250.0
+			line_gap := (em / 1.5)
+			edge_gap := (em / 2)
+			pos := Vec2{
+				(graph_rect.pos.x + graph_rect.size.x) - histogram_height - edge_gap,
+				info_pane_y - histogram_height - ((em + line_gap) * 2) - edge_gap,
 			}
 
-			next_line(&y, em)
-			first_stat = false
+			name_str := in_getstr(&trace.string_block, selected_func)
+			stat, ok := sm_get(&trace.stats, selected_func)
+			if ok {
+				draw_histogram(rects, name_str, stat, pos, histogram_height)
+			}
 		}
 
 		y = header_start
@@ -1584,6 +1597,14 @@ process_multiselect :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, pan_delta:
 			events := thread.depths[range.did].events[start_idx:range.end]
 
 			for ev, e_idx in events {
+/*
+				if event_count > iter_max {
+					cur_stat_offset = StatOffset{r_idx, start_idx + e_idx}
+					broke_early = true
+					break range_loop
+				}
+*/
+
 				duration := bound_duration(ev, thread.max_time)
 				name := in_getstr(&trace.string_block, ev.name)
 				s, ok := sm_get(&trace.stats, ev.name)
@@ -1605,6 +1626,7 @@ process_multiselect :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, pan_delta:
 				duration := bound_duration(ev, thread.max_time)
 				name := in_getstr(&trace.string_block, ev.name)
 				s, ok := sm_get(&trace.stats, ev.name)
+				assert(ok == true)
 
 				assert(duration <= s.max_time)
 				assert(s.max_time - s.min_time >= 0)
@@ -1612,13 +1634,12 @@ process_multiselect :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, pan_delta:
 					s.hist[50] += 1
 				} else {
 					t := (duration - s.min_time) / (s.max_time - s.min_time)
-					if t <= 0 { t = 0 }
-					if t >= 1 { t = 1 }
+					t = min(1, max(t, 0))
 					t *= 99
+
 					assert(t < 100)
 					s.hist[u32(t)] += 1
 				}
-				// s.hist[u32(((s.total_time / f64(s.count) - s.min_time) / (s.max_time - s.min_time)) * 99)] = s.count;
 			}
 		}
 
@@ -1698,7 +1719,7 @@ process_inputs :: proc(trace: ^Trace, stat_pane, mini_graph_rect: Rect, dt, disp
 			cam.target_scale *= math.pow(1.0025, -scroll_val_y)
 			cam.target_scale  = min(max(cam.target_scale, min_scale), max_scale)
 		} else if pt_in_rect(mouse_pos, stat_pane) {
-			info_pane_scroll_vel -= scroll_val_y < 0 ? -100 : scroll_val_y > 0 ? +100 : 0
+			info_pane_scroll_vel -= scroll_val_y * 10
 		} else if pt_in_rect(mouse_pos, mini_graph_rect) {
 			cam.vel.y += scroll_val_y * 10
 		}

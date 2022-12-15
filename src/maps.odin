@@ -280,11 +280,11 @@ sm_init :: proc(allocator := context.allocator) -> StatMap {
 	}
 	return v
 }
-sm_hash :: proc (key: INStr) -> u32 {
-	return u32(key.start) * 2654435769
+sm_hash :: proc(start: u32) -> u32 {
+	return start * 2654435769
 }
-sm_reinsert :: proc (v: ^StatMap, entry: StatEntry, v_idx: int) {
-	hv := sm_hash(entry.key) & u32(len(v.hashes) - 1)
+sm_reinsert :: proc(v: ^StatMap, entry: StatEntry, v_idx: int) {
+	hv := sm_hash(u32(entry.key.start)) & u32(len(v.hashes) - 1)
 	for i: u32 = 0; i < u32(len(v.hashes)); i += 1 {
 		idx := (hv + i) & u32(len(v.hashes) - 1)
 
@@ -311,7 +311,7 @@ sm_grow :: proc(v: ^StatMap) {
 }
 
 sm_get :: proc(v: ^StatMap, key: INStr) -> (^Stats, bool) {
-	hv := sm_hash(key) & u32(len(v.hashes) - 1)
+	hv := sm_hash(u32(key.start)) & u32(len(v.hashes) - 1)
 
 	for i: u32 = 0; i < u32(len(v.hashes)); i += 1 {
 		idx := (hv + i) & u32(len(v.hashes) - 1)
@@ -319,7 +319,10 @@ sm_get :: proc(v: ^StatMap, key: INStr) -> (^Stats, bool) {
 		e_idx := v.hashes[idx]
 		if e_idx == -1 {
 			return nil, false
-		} else if v.entries[e_idx].key.start == key.start {
+		}
+
+		entry_key := v.entries[e_idx].key
+		if entry_key.start == key.start {
 			return &v.entries[e_idx].val, true
 		}
 	}
@@ -331,7 +334,7 @@ sm_insert :: proc(v: ^StatMap, key: INStr, val: Stats) -> ^Stats {
 		sm_grow(v)
 	}
 
-	hv := sm_hash(key) & u32(len(v.hashes) - 1)
+	hv := sm_hash(u32(key.start)) & u32(len(v.hashes) - 1)
 	for i: u32 = 0; i < u32(len(v.hashes)); i += 1 {
 		idx := (hv + i) & u32(len(v.hashes) - 1)
 
@@ -351,6 +354,13 @@ sm_insert :: proc(v: ^StatMap, key: INStr, val: Stats) -> ^Stats {
 }
 sm_sort :: proc(v: ^StatMap, less: proc(i, j: StatEntry) -> bool) {
 	slice.sort_by(v.entries[:], less)
+	for i in 0..<len(v.hashes) {
+		v.hashes[i] = -1
+	}
+
+	for entry, idx in v.entries {
+		sm_reinsert(v, entry, idx)
+	}
 }
 sm_clear :: proc(v: ^StatMap)  {
 	resize(&v.entries, 0)

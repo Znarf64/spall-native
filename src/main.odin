@@ -40,6 +40,7 @@ info_pane_scroll_vel: f64 = 0
 cam := Camera{Vec2{0, 0}, Vec2{0, 0}, 0, 1, 1}
 
 // selection state
+selected_func := INStr{-1, 0}
 selected_event := EventID{-1, -1, -1, -1}
 
 pressed_event := EventID{-1, -1, -1, -1}

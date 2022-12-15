@@ -13,6 +13,11 @@ trap :: proc() -> ! {
 	intrinsics.trap()
 }
 
+panic :: proc(fmt_in: string, args: ..any) -> ! {
+	fmt.printf(fmt_in, ..args)
+	intrinsics.trap()
+}
+
 rand_int :: proc(min, max: int) -> int {
     return int(rand.int31()) % (max-min) + min
 }
