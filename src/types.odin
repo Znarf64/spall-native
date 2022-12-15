@@ -86,6 +86,7 @@ Stats :: struct {
 	min_time: f64,
 	max_time: f64,
 	count: u32,
+	hist: [100] u32,
 }
 Range :: struct {
 	pid: int,

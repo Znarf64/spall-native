@@ -61,7 +61,7 @@ draw_graph :: proc(rects: ^[dynamic]DrawRect, header: string, history: ^queue.Qu
 	line_width : f64 = 1
 	graph_edge_pad : f64 = 2 * em
 	line_gap := (em / 1.5)
-	graph_size: f64 = 150
+	graph_size: f64 = 500
 
 	max_val : f64 = 0
 	min_val : f64 = 1e5000
@@ -1185,6 +1185,13 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, info_pane_y, info_p
 			draw_rect(rects, dr, BVec4{u8(tmp_color.x), u8(tmp_color.y), u8(tmp_color.z), 255})
 			draw_text(rects, name_str, Vec2{cursor, y_before + (em / 3)}, .PSize, .MonoFont, text_color)
 
+			history : queue.Queue(f64);
+			queue.init(&history, 100, context.temp_allocator);
+			for it in stat.hist {
+				queue.push_back(&history, math.log2_f64(f64(it + 1)))
+			}
+			draw_graph(rects, name_str, &history, Vec2{cursor + 300, y_before - 700})
+
 			next_line(&y, em)
 		}
 
@@ -1470,12 +1477,6 @@ process_multiselect :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, pan_delta:
 			events := thread.depths[range.did].events[start_idx:range.end]
 
 			for ev, e_idx in events {
-				if event_count > iter_max {
-					cur_stat_offset = StatOffset{r_idx, start_idx + e_idx}
-					broke_early = true
-					break range_loop
-				}
-
 				duration := bound_duration(ev, thread.max_time)
 				name := in_getstr(&trace.string_block, ev.name)
 				s, ok := sm_get(&trace.stats, ev.name)
@@ -1491,6 +1492,26 @@ process_multiselect :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, pan_delta:
 				total_tracked_time += duration
 
 				event_count += 1
+			}
+
+			for ev, e_idx in events {
+				duration := bound_duration(ev, thread.max_time)
+				name := in_getstr(&trace.string_block, ev.name)
+				s, ok := sm_get(&trace.stats, ev.name)
+
+				assert(duration <= s.max_time);
+				assert(s.max_time - s.min_time >= 0)
+				if (s.max_time - s.min_time <= 0) {
+					s.hist[50] += 1;
+				} else {
+					t := (duration - s.min_time) / (s.max_time - s.min_time)
+					if t <= 0 { t = 0 }
+					if t >= 1 { t = 1 }
+					t *= 99
+					assert(t < 100)
+					s.hist[u32(t)] += 1;
+				}
+				// s.hist[u32(((s.total_time / f64(s.count) - s.min_time) / (s.max_time - s.min_time)) * 99)] = s.count;
 			}
 		}
 
@@ -1570,7 +1591,7 @@ process_inputs :: proc(trace: ^Trace, stat_pane, mini_graph_rect: Rect, dt, disp
 			cam.target_scale *= math.pow(1.0025, -scroll_val_y)
 			cam.target_scale  = min(max(cam.target_scale, min_scale), max_scale)
 		} else if pt_in_rect(mouse_pos, stat_pane) {
-			info_pane_scroll_vel -= scroll_val_y * 10
+			info_pane_scroll_vel -= scroll_val_y < 0 ? -100 : scroll_val_y > 0 ? +100 : 0
 		} else if pt_in_rect(mouse_pos, mini_graph_rect) {
 			cam.vel.y += scroll_val_y * 10
 		}
@@ -1578,7 +1599,7 @@ process_inputs :: proc(trace: ^Trace, stat_pane, mini_graph_rect: Rect, dt, disp
 
 		info_pane_scroll += (info_pane_scroll_vel * dt)
 		info_pane_scroll_vel *= math.pow(0.000001, dt)
-		info_pane_scroll = min(info_pane_scroll, 0)
+		info_pane_scroll = min(info_pane_scroll, em * 8.5)
 
 		cam.current_scale += (cam.target_scale - cam.current_scale) * (1 - math.pow(math.pow_f64(0.1, 12), (dt)))
 		cam.current_scale = min(max(cam.current_scale, min_scale), max_scale)
