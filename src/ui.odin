@@ -57,11 +57,12 @@ button :: proc(rects: ^[dynamic]DrawRect, in_rect: Rect, label_text, tooltip_tex
 	return false
 }
 
-draw_histogram :: proc(rects: ^[dynamic]DrawRect, header: string, history: []f64, pos: Vec2, graph_size: f64) {
+draw_histogram :: proc(rects: ^[dynamic]DrawRect, header: string, stat: ^Stats, pos: Vec2, graph_size: f64) {
 	line_width : f64 = 1
 	graph_edge_pad : f64 = 2 * em
 	line_gap := (em / 1.5)
 
+	history := stat.hist
 	temp_history := make([]f64, len(history), context.temp_allocator)
 
 	max_val : f64 = 0
@@ -79,29 +80,47 @@ draw_histogram :: proc(rects: ^[dynamic]DrawRect, header: string, history: []f64
 	draw_text(rects, header, Vec2{pos.x + center_offset, pos.y}, .PSize, .DefaultFont, text_color)
 
 	graph_top := pos.y + em + line_gap
+	graph_bottom := graph_top + graph_size
 	draw_rect(rects, rect(pos.x, graph_top, graph_size, graph_size), bg_color2)
 	draw_rect_outline(rects, rect(pos.x, graph_top, graph_size, graph_size), 2, outline_color)
+
+	high_height := graph_top + graph_edge_pad - (em / 2)
+	low_height := graph_bottom - graph_edge_pad - (em / 2)
+
+	near_width := pos.x + (graph_edge_pad / 2)
+	far_width  := pos.x + graph_size - (graph_edge_pad / 2)
 
 	if len(temp_history) > 1 {
 		buf: [384]byte
 		b := strings.builder_from_bytes(buf[:])
 
-		high_height := graph_top + graph_edge_pad - (em / 2)
-		low_height := graph_top + graph_size - graph_edge_pad - (em / 2)
 
-		tac_count := 5
-		for i := 0; i < tac_count; i += 1 {
-			cur_perc := f64(i) / f64(tac_count - 1)
-			cur_val := math.pow(2, math.lerp(min_val, max_val, cur_perc))
-			cur_height := math.lerp(low_height, high_height, cur_perc)
+		x_tac_count := 5
+		for i := 0; i < x_tac_count; i += 1 {
+			cur_perc := f64(i) / f64(x_tac_count - 1)
+			cur_x_val := math.pow(2, math.lerp(min_val, max_val, cur_perc))
+			cur_x_height := math.lerp(low_height, high_height, cur_perc)
 
 			strings.builder_reset(&b)
-			my_write_float(&b, cur_val, 3)
-			cur_str := strings.to_string(b)
-			cur_width := measure_text(cur_str, .PSize, .DefaultFont) + line_gap
-			draw_text(rects, cur_str, Vec2{(pos.x - 5) - cur_width, cur_height}, .PSize, .DefaultFont, text_color)
+			my_write_float(&b, cur_x_val, 3)
+			cur_x_str := strings.to_string(b)
+			cur_x_width := measure_text(cur_x_str, .PSize, .DefaultFont) + line_gap
+			draw_text(rects, cur_x_str, Vec2{(pos.x - 5) - cur_x_width, cur_x_height}, .PSize, .DefaultFont, text_color)
 
-			draw_line(rects, Vec2{pos.x - 5, cur_height + (em / 2)}, Vec2{pos.x + 5, cur_height + (em / 2)}, 1, graph_color)
+			draw_line(rects, Vec2{pos.x - 5, cur_x_height + (em / 2)}, Vec2{pos.x + 5, cur_x_height + (em / 2)}, 1, graph_color)
+		}
+
+		y_tac_count := 4
+		for i := 0; i < y_tac_count; i += 1 {
+			cur_perc := f64(i) / f64(y_tac_count - 1)
+			cur_y_val := math.lerp(stat.min_time, stat.max_time, cur_perc)
+			cur_y_pos := math.lerp(near_width, far_width, cur_perc)
+
+			cur_y_str := stat_fmt(cur_y_val)
+			cur_y_width := measure_text(cur_y_str, .PSize, .DefaultFont)
+			draw_text(rects, cur_y_str, Vec2{cur_y_pos - (cur_y_width / 2), graph_bottom + 5}, .PSize, .DefaultFont, text_color)
+
+			draw_line(rects, Vec2{cur_y_pos, graph_bottom - 5}, Vec2{cur_y_pos, graph_bottom + 5}, 1, graph_color)
 		}
 	}
 
@@ -131,6 +150,11 @@ draw_histogram :: proc(rects: ^[dynamic]DrawRect, header: string, history: []f64
 
 		last_x = point_x
 		last_y = point_y
+	}
+
+	if len(temp_history) > 1 {
+		avg_offset := rescale(stat.avg_time, stat.min_time, stat.max_time, near_width, far_width)
+		draw_line(rects, Vec2{avg_offset, graph_top + graph_edge_pad}, Vec2{avg_offset, graph_bottom - graph_edge_pad}, 1, BVec4{255, 0, 0, 255})
 	}
 }
 
@@ -1269,9 +1293,9 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, info_pane_y, info_p
 				edge_gap := (em / 2)
 				pos := Vec2{
 					(graph_rect.pos.x + graph_rect.size.x) - histogram_height - edge_gap,
-					info_pane_y - histogram_height - (em + line_gap) - edge_gap,
+					info_pane_y - histogram_height - ((em + line_gap) * 2) - edge_gap,
 				}
-				draw_histogram(rects, name_str, stat.hist[:], pos, histogram_height)
+				draw_histogram(rects, name_str, &stat, pos, histogram_height)
 			}
 
 			next_line(&y, em)
