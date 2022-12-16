@@ -1268,7 +1268,11 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, info_pane_y, info_p
 			}
 
 			if clicked && pt_in_rect(clicked_pos, click_rect) {
-				selected_func = name
+				if selected_func.start == name.start {
+					selected_func.start = -1
+				} else {
+					selected_func = name
+				}
 			}
 
 			if selected_func.start == name.start {
