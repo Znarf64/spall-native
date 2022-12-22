@@ -77,8 +77,8 @@ bin_push_event :: proc(trace: ^Trace, process_id, thread_id: u32, event: ^Event)
 	t := &p.threads[t_idx]
 	t.min_time = min(t.min_time, event.timestamp)
 	if t.max_time > event.timestamp {
-		fmt.printf("Woah, time-travel? You just had a begin event that started before a previous one; [pid: %d, tid: %d, name: %s]\n", 
-			process_id, thread_id, in_getstr(&trace.string_block, event.name))
+		fmt.printf("Woah, time-travel? You just had a begin event that started before a previous one; [pid: %d, tid: %d, name: %s, event: %v, event_count: %d]\n", 
+			process_id, thread_id, in_getstr(&trace.string_block, event.name), event, trace.event_count)
 		push_fatal(SpallError.InvalidFile)
 	}
 	t.max_time = event.timestamp + event.duration

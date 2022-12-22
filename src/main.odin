@@ -123,7 +123,8 @@ idx_pos := [?]glm.vec2{
 @(cold)
 push_fatal :: proc(err: SpallError) -> ! {
 	fmt.eprintf("Error: %v\n", err)
-	os.exit(1)
+	trap()
+	// os.exit(1)
 }
 
 to_world_x :: proc(cam: Camera, x: f64) -> f64 {
