@@ -116,13 +116,6 @@ idx_pos := [?]glm.vec2{
 	{1.0, 1.0},
 }
 
-@(cold)
-push_fatal :: proc(err: SpallError) -> ! {
-	fmt.eprintf("Error: %v\n", err)
-	trap()
-	// os.exit(1)
-}
-
 to_world_x :: proc(cam: Camera, x: f64) -> f64 {
 	return (x - cam.pan.x) / cam.current_scale
 }
@@ -558,13 +551,13 @@ main :: proc() {
 		ui_state.minimap_rect            = rect(width - minigraph_width, topbars_height, minigraph_width, flamegraph_height)
 		ui_state.info_pane_rect          = rect(0, height - info_pane_height, width, info_pane_height)
 
-		ui_state.full_flamegraph_rect   = rect(spall_x_pad, topbars_height, flamegraph_width, flamegraph_height)
+		ui_state.full_flamegraph_rect    = rect(spall_x_pad, topbars_height, flamegraph_width, flamegraph_height)
 
-		ui_state.inner_flamegraph_rect  = ui_state.full_flamegraph_rect
+		ui_state.inner_flamegraph_rect    = ui_state.full_flamegraph_rect
 		ui_state.inner_flamegraph_rect.y += ui_state.flamegraph_toptext_height
 		ui_state.inner_flamegraph_rect.h -= ui_state.flamegraph_toptext_height
 
-		ui_state.padded_flamegraph_rect = ui_state.inner_flamegraph_rect
+		ui_state.padded_flamegraph_rect    = ui_state.inner_flamegraph_rect
 		ui_state.padded_flamegraph_rect.y += em
 		ui_state.padded_flamegraph_rect.h -= em
 
@@ -620,6 +613,10 @@ main :: proc() {
 		// if there's a rectangle tooltip to render, now's the time.
 		if rendered_rect_tooltip {
 			draw_rect_tooltip(&rects, trace, &ui_state)
+		}
+
+		if trace.error_message != "" {
+			draw_errorbox(&rects, trace, &ui_state)
 		}
 
 		// Phew... Ok, time to dump to the screen

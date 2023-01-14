@@ -199,6 +199,9 @@ Trace :: struct {
 	event_count: u64,
 	instant_count: u64,
 	stamp_scale: f64,
+
+	error_message: string,
+	error_storage: [4096]u8,
 }
 
 BUCKET_SIZE :: 4

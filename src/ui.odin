@@ -1927,3 +1927,18 @@ process_inputs :: proc(trace: ^Trace, dt: f64, ui_state: ^UIState) -> (f64, f64,
 
 	return start_time, end_time, pan_delta
 }
+
+draw_errorbox :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState) {
+	inner_flamegraph_rect := ui_state.inner_flamegraph_rect
+
+	msg_width := measure_text(trace.error_message, .PSize, .DefaultFont)
+	msg_height := em
+
+	error_rect := inner_flamegraph_rect
+	error_rect.w = min(msg_width  + (2 * em), inner_flamegraph_rect.w)
+	error_rect.h = min(msg_height + (2 * em),  inner_flamegraph_rect.h)
+	error_rect.x = (inner_flamegraph_rect.x + inner_flamegraph_rect.w) - error_rect.w
+
+	draw_rect(rects, error_rect, error_color)
+	draw_text(rects, trace.error_message, Vec2{(error_rect.x + (error_rect.w / 2)) - (msg_width / 2), (error_rect.y + (error_rect.h / 2)) - (msg_height / 2)}, .PSize, .DefaultFont, text_color)
+}

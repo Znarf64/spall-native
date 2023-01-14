@@ -14,6 +14,7 @@ division_color    := BVec4{}
 subdivision_color := BVec4{}
 outline_color := BVec4{}
 xbar_color    := BVec4{}
+error_color   := BVec4{}
 
 subbar_color := BVec4{}
 subbar_split_color := BVec4{}
@@ -37,6 +38,8 @@ ColorMode :: enum {
 
 default_colors :: proc "contextless" (is_dark: bool) {
 	loading_block_color  = BVec4{100, 194, 236, 255}
+
+	error_color = BVec4{0xFF, 0x3F, 0x83, 255}
 
 	if is_dark {
 		bg_color         = BVec4{15,   15,  15, 255}

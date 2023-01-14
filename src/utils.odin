@@ -17,6 +17,16 @@ panic :: proc(fmt_in: string, args: ..any) -> ! {
 	fmt.printf(fmt_in, ..args)
 	intrinsics.trap()
 }
+post_error :: proc(trace: ^Trace, fmt_in: string, args: ..any) {
+	trace.error_message = fmt.bprintf(trace.error_storage[:], fmt_in, ..args)
+}
+
+@(cold)
+push_fatal :: proc(err: SpallError) -> ! {
+	fmt.eprintf("Error: %v\n", err)
+	trap()
+	// os.exit(1)
+}
 
 rand_int :: proc(min, max: int) -> int {
     return int(rand.int31()) % (max-min) + min

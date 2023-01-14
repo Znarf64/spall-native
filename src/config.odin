@@ -363,15 +363,6 @@ tid_sort_proc :: proc(a, b: Thread) -> bool  { return a.min_time < b.min_time }
 load_file :: proc(trace: ^Trace, file_name: string) {
 	start_time := time.tick_now()
 
-	trace_fd, err := os.open(file_name)
-	if err != 0 {
-		push_fatal(SpallError.InvalidFile)
-	}
-	defer os.close(trace_fd)
-
-	chunk_buffer := make([]u8, 1 * 1024 * 1024)
-	defer delete(chunk_buffer)
-
 	trace^ = Trace{
 		processes = make([dynamic]Process),
 		selected_ranges = make([dynamic]Range),
@@ -385,18 +376,31 @@ load_file :: proc(trace: ^Trace, file_name: string) {
 		file_name = file_name,
 		string_block = make([dynamic]u8),
 		parser = init_parser(),
+		error_message = "",
 	}
 
+	trace_fd, err := os.open(file_name)
+	if err != 0 {
+		post_error(trace, "%s not found!", file_name)
+		return
+	}
+	defer os.close(trace_fd)
+
+	chunk_buffer := make([]u8, 1 * 1024 * 1024)
+	defer delete(chunk_buffer)
+
 	total_size, err2 := os.file_size(trace_fd)
-	if err2 != 0 {
-		push_fatal(SpallError.InvalidFile)
+	if err2 != 0 || total_size == 0 {
+		post_error(trace, "%s is empty!", file_name)
+		return
 	}
 	trace.total_size = total_size
 	fmt.printf("Loading %s, %f MB\n", trace.base_name, f64(trace.total_size) / 1024 / 1024)
 
 	rd_sz, err3 := os.read(trace_fd, chunk_buffer)
 	if err3 != 0 {
-		push_fatal(SpallError.InvalidFile)
+		post_error(trace, "Unable to read %s!", file_name)
+		return
 	}
 
 	// parse header
@@ -404,7 +408,8 @@ load_file :: proc(trace: ^Trace, file_name: string) {
 
 	header_sz := i64(size_of(spall.Header))
 	if i64(len(full_chunk)) < header_sz {
-		push_fatal(SpallError.InvalidFile)
+		post_error(trace, "File %s too small to be valid!", file_name)
+		return
 	}
 
 	file_type: FileType
@@ -412,7 +417,8 @@ load_file :: proc(trace: ^Trace, file_name: string) {
 	if magic == spall.MAGIC {
 		hdr := cast(^spall.Header)raw_data(full_chunk)
 		if hdr.version != 1 {
-			push_fatal(SpallError.InvalidFileVersion)
+			post_error(trace, "Spall version %d for %s is invalid!", hdr.version, file_name)
+			return
 		}
 		
 		trace.stamp_scale = hdr.timestamp_unit
