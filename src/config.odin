@@ -431,13 +431,17 @@ load_file :: proc(trace: ^Trace, file_name: string) {
 		file_type = .Json
 	}
 
+	parsed_properly := false
 	#partial switch file_type {
 	case .SpallStream:
-		parse_binary(trace, trace_fd, chunk_buffer, i64(rd_sz))
+		parsed_properly = parse_binary(trace, trace_fd, chunk_buffer, i64(rd_sz))
 	case .Json:
-		parse_json(trace, trace_fd, chunk_buffer)
+		parsed_properly = parse_json(trace, trace_fd, chunk_buffer)
 	}
 	free_trace_temps(trace)
+	if !parsed_properly {
+		return
+	}
 
 	#partial switch file_type {
 	case .SpallStream:

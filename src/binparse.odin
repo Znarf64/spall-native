@@ -67,7 +67,7 @@ get_next_event :: proc(trace: ^Trace, chunk: []u8, temp_ev: ^TempEvent) -> Binar
 	return .PartialRead
 }
 
-bin_push_event :: proc(trace: ^Trace, process_id, thread_id: u32, event: ^Event) -> (int, int, int) {
+bin_push_event :: proc(trace: ^Trace, process_id, thread_id: u32, event: ^Event) -> (int, int, int, bool) {
 	p_idx := setup_pid(trace, process_id)
 	t_idx := setup_tid(trace, p_idx, thread_id)
 
@@ -77,9 +77,10 @@ bin_push_event :: proc(trace: ^Trace, process_id, thread_id: u32, event: ^Event)
 	t := &p.threads[t_idx]
 	t.min_time = min(t.min_time, event.timestamp)
 	if t.max_time > event.timestamp {
-		fmt.printf("Woah, time-travel? You just had a begin event that started before a previous one; [pid: %d, tid: %d, name: %s, event: %v, event_count: %d]\n", 
+		post_error(trace, 
+			"Woah, time-travel? You just had a begin event that started before a previous one; [pid: %d, tid: %d, name: %s, event: %v, event_count: %d]", 
 			process_id, thread_id, in_getstr(&trace.string_block, event.name), event, trace.event_count)
-		push_fatal(SpallError.InvalidFile)
+		return 0, 0, 0, false
 	}
 	t.max_time = event.timestamp + event.duration
 
@@ -97,10 +98,10 @@ bin_push_event :: proc(trace: ^Trace, process_id, thread_id: u32, event: ^Event)
 	t.current_depth += 1
 	append_event(&depth.events, event)
 
-	return p_idx, t_idx, len(depth.events)-1
+	return p_idx, t_idx, len(depth.events)-1, true
 }
 
-parse_binary :: proc(trace: ^Trace, fd: os.Handle, chunk_buffer: []u8, read_size: i64) {
+parse_binary :: proc(trace: ^Trace, fd: os.Handle, chunk_buffer: []u8, read_size: i64) -> bool {
 	temp_ev := TempEvent{}
 	ev := Event{}
 	p := &trace.parser
@@ -123,13 +124,15 @@ parse_binary :: proc(trace: ^Trace, fd: os.Handle, chunk_buffer: []u8, read_size
 
 			rd_sz, ok := get_chunk(p, fd, chunk_buffer)
 			if !ok {
-				push_fatal(SpallError.FileFailure)
+				post_error(trace, "Failed to read file!")
+				return false
 			}
 
 			full_chunk = chunk_buffer[:rd_sz]
 			continue
 		case .Failure:
-			push_fatal(SpallError.InvalidFile)
+			post_error(trace, "Failed to read file!")
+			return false
 		}
 
 		#partial switch temp_ev.type {
@@ -140,7 +143,11 @@ parse_binary :: proc(trace: ^Trace, fd: os.Handle, chunk_buffer: []u8, read_size
 			ev.self_time = 0
 			ev.timestamp = temp_ev.timestamp * trace.stamp_scale
 
-			p_idx, t_idx, e_idx := bin_push_event(trace, temp_ev.process_id, temp_ev.thread_id, &ev)
+			p_idx, t_idx, e_idx, ok := bin_push_event(trace, temp_ev.process_id, temp_ev.thread_id, &ev)
+			if !ok {
+				return false
+			}
+
 			thread := &trace.processes[p_idx].threads[t_idx]
 			stack_push_back(&thread.bande_q, EVData{idx = e_idx, depth = thread.current_depth - 1, self_time = 0})
 
@@ -207,4 +214,6 @@ parse_binary :: proc(trace: ^Trace, fd: os.Handle, chunk_buffer: []u8, read_size
 			}
 		}
 	}
+
+	return true
 }

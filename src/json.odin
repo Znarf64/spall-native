@@ -9,6 +9,7 @@ import "core:encoding/json"
 import "core:os"
 
 JSONState :: enum {
+	InvalidFile,
 	InvalidToken,
 	PartialRead,
 	Finished,
@@ -285,8 +286,8 @@ the_skipper :: proc(trace: ^Trace, jp: ^JSONParser, chunk: []u8) -> JSONState {
 
 		ch := chunk[chunk_pos(p)]
 		if ch != '{' && ch != '[' {
-			fmt.printf("Your JSON file is invalid! got %c, expected [ or {{\n", ch)
-			push_fatal(SpallError.InvalidFile)
+			post_error(trace, "Your JSON file is invalid! got %c, expected [ or {{", ch)
+			return .InvalidFile
 		}
 
 		if ch == '[' {
@@ -319,8 +320,8 @@ the_skipper :: proc(trace: ^Trace, jp: ^JSONParser, chunk: []u8) -> JSONState {
 
 				ch := chunk[chunk_pos(p)]
 				if ch != ':' {
-					fmt.printf("Your JSON file is invalid! got %c, expected :\n", ch)
-					push_fatal(SpallError.InvalidFile)
+					post_error(trace, "Your JSON file is invalid! got %c, expected :", ch)
+					return .InvalidFile
 				}
 				p.pos += 1
 
@@ -332,8 +333,8 @@ the_skipper :: proc(trace: ^Trace, jp: ^JSONParser, chunk: []u8) -> JSONState {
 
 				ch = chunk[chunk_pos(p)]
 				if ch != '[' {
-					fmt.printf("Your JSON file is invalid! got %c, expected [\n", ch)
-					push_fatal(SpallError.InvalidFile)
+					post_error(trace, "Your JSON file is invalid! got %c, expected [", ch)
+					return .InvalidFile
 				}
 
 				p.pos += 1
@@ -378,15 +379,15 @@ skip_to_start_or_end :: proc(trace: ^Trace, chunk: []u8) -> JSONState {
 	return .PartialRead
 }
 
-process_key_value :: proc(trace: ^Trace, ev: ^TempEvent, key: FieldType, value: string) #no_bounds_check {
+process_key_value :: proc(trace: ^Trace, ev: ^TempEvent, key: FieldType, value: string) -> bool #no_bounds_check {
 	#partial switch key {
 	case .Name:
 		str := in_get(&trace.parser.intern, &trace.string_block, value)
 		ev.name = str
 	case .Ph:
 		if len(value) != 1 {
-			fmt.printf("Invalid type!\n")
-			push_fatal(SpallError.InvalidFile)
+			post_error(trace, "Invalid event type!")
+			return false
 		}
 
 		type_ch := value[0]
@@ -402,35 +403,35 @@ process_key_value :: proc(trace: ^Trace, ev: ^TempEvent, key: FieldType, value: 
 	case .Dur: 
 		dur, ok := parse_f64(value)
 		if !ok {
-			fmt.printf("Invalid number!\n")
-			push_fatal(SpallError.InvalidFile)
+			post_error(trace, "Invalid duration!")
+			return false
 		}
 		ev.duration = dur
 	case .Ts: 
 		ts, ok := parse_f64(value)
 		if !ok {
-			fmt.printf("Invalid number!\n")
-			push_fatal(SpallError.InvalidFile)
+			post_error(trace, "Invalid timestamp!")
+			return false
 		}
 		ev.timestamp = ts
 	case .Tid: 
 		tid, ok := parse_u32(value)
 		if !ok {
-			fmt.printf("Invalid number!\n")
-			push_fatal(SpallError.InvalidFile)
+			post_error(trace, "Invalid tid!")
+			return false
 		}
 		ev.thread_id = tid
 	case .Pid: 
 		pid, ok := parse_u32(value)
 		if !ok {
-			fmt.printf("Invalid number!\n")
-			push_fatal(SpallError.InvalidFile)
+			post_error(trace, "Invalid pid!")
+			return false
 		}
 		ev.process_id = pid
 	case .S: 
 		if len(value) != 1 {
-			fmt.printf("Invalid scope!\n")
-			push_fatal(SpallError.InvalidFile)
+			post_error(trace, "Invalid scope!")
+			return false
 		}
 
 		scope_ch := value[0]
@@ -440,9 +441,11 @@ process_key_value :: proc(trace: ^Trace, ev: ^TempEvent, key: FieldType, value: 
 		case 't': ev.scope = .Thread
 		}
 	}
+
+	return true
 }
 
-process_sample :: proc(trace: ^Trace, jp: ^JSONParser, ev: ^TempEvent) {
+process_sample :: proc(trace: ^Trace, jp: ^JSONParser, ev: ^TempEvent) -> bool {
 	p := &trace.parser
 	new_event: Event = ---
 
@@ -451,20 +454,20 @@ process_sample :: proc(trace: ^Trace, jp: ^JSONParser, ev: ^TempEvent) {
 	if meta_str == "Profile" {
 		blob, err := json.parse_string(in_getstr(&trace.string_block, ev.args), json.DEFAULT_SPECIFICATION, false, context.temp_allocator)
 		if err != nil {
-			fmt.printf("Failed to parse args?\n")
-			push_fatal(SpallError.InvalidFile)
+			post_error(trace, "Failed to parse args?")
+			return false
 		}
 
 		arg_map, _ := blob.(json.Object)
 		data_map, ok := arg_map["data"].(json.Object)
 		if !ok {
-			fmt.printf("Invalid %s\n", meta_str)
-			push_fatal(SpallError.InvalidFile)
+			post_error(trace, "Invalid %s", meta_str)
+			return false
 		}
 		start_time, ok2 := data_map["startTime"].(json.Float)
 		if !ok2 {
-			fmt.printf("Invalid %s\n", meta_str)
-			push_fatal(SpallError.InvalidFile)
+			post_error(trace, "Invalid %s", meta_str)
+			return false
 		}
 
 		p_idx := setup_pid(trace, ev.process_id)
@@ -501,8 +504,8 @@ process_sample :: proc(trace: ^Trace, jp: ^JSONParser, ev: ^TempEvent) {
 		chunk := ChunkArgs{}
 		err := json.unmarshal_string(in_getstr(&trace.string_block, ev.args), &chunk, json.DEFAULT_SPECIFICATION, context.temp_allocator)
 		if err != nil {
-			fmt.printf("Failed to parse args?\n")
-			push_fatal(SpallError.InvalidFile)
+			post_error(trace, "Failed to parse args")
+			return false
 		}
 
 		for node in chunk.data.cpuProfile.nodes {
@@ -580,8 +583,8 @@ process_sample :: proc(trace: ^Trace, jp: ^JSONParser, ev: ^TempEvent) {
 						cur_node_id = profile.nodes[cur_node_id].parent
 
 						if cycle_count > 1000 {
-							fmt.printf("stack too deep, do we have a cycle?\n")
-							push_fatal(SpallError.InvalidFile)
+							post_error(trace, "stack too deep, do we have a cycle?")
+							return false
 						}
 						cycle_count += 1
 					}
@@ -613,9 +616,11 @@ process_sample :: proc(trace: ^Trace, jp: ^JSONParser, ev: ^TempEvent) {
 			}
 		}
 	}
+
+	return true
 }
 
-process_event :: proc(trace: ^Trace, jp: ^JSONParser, ev: ^TempEvent) {
+process_event :: proc(trace: ^Trace, jp: ^JSONParser, ev: ^TempEvent) -> bool {
 	#partial switch ev.type {
 	case .Instant:
 		json_push_instant(trace, ev)
@@ -643,13 +648,13 @@ process_event :: proc(trace: ^Trace, jp: ^JSONParser, ev: ^TempEvent) {
 	case .End:
 		p_idx, ok1 := vh_find(&trace.process_map, u32(ev.process_id))
 		if !ok1 {
-			fmt.printf("Invalid pid: %d\n", ev.process_id)
-			push_fatal(SpallError.InvalidFile)
+			post_error(trace, "Invalid pid %d", ev.process_id)
+			return false
 		}
 		t_idx, ok2 := vh_find(&trace.processes[p_idx].thread_map, u32(ev.thread_id))
 		if !ok2 {
-			fmt.printf("Invalid tid: %d\n", ev.thread_id)
-			push_fatal(SpallError.InvalidFile)
+			post_error(trace, "Invalid tid %d", ev.thread_id)
+			return false
 		}
 
 		thread := &trace.processes[p_idx].threads[t_idx]
@@ -662,24 +667,26 @@ process_event :: proc(trace: ^Trace, jp: ^JSONParser, ev: ^TempEvent) {
 			trace.total_max_time = max(trace.total_max_time, jev.timestamp + jev.duration)
 		} else {
 			fmt.printf("You've sent one too many ends!\n")
-			push_fatal(SpallError.InvalidFile)
 		}
 	case .Sample:
-		process_sample(trace, jp, ev)
+		ok := process_sample(trace, jp, ev)
+		if !ok {
+			return false
+		}
 	case .Metadata:
 		meta_str := in_getstr(&trace.string_block, ev.name)
 		if meta_str == "thread_name" || meta_str == "process_name" {
 			blob, err := json.parse_string(in_getstr(&trace.string_block, ev.args), json.DEFAULT_SPECIFICATION, false, context.temp_allocator)
 			if err != nil {
-				fmt.printf("Failed to parse args?\n")
-				push_fatal(SpallError.InvalidFile)
+				post_error(trace, "Failed to parse args?")
+				return false
 			}
 
 			arg_map, _ := blob.(json.Object)
 			m_name, ok := arg_map["name"].(json.String)
 			if !ok {
-				fmt.printf("Invalid %s\n", meta_str)
-				push_fatal(SpallError.InvalidFile)
+				post_error(trace, "Invalid %s", meta_str)
+				return false
 			}
 
 			name := in_get(&trace.parser.intern, &trace.string_block, m_name)
@@ -694,6 +701,8 @@ process_event :: proc(trace: ^Trace, jp: ^JSONParser, ev: ^TempEvent) {
 			}
 		}
 	}
+
+	return true
 }
 
 process_next_json_event :: proc(trace: ^Trace, jp: ^JSONParser, chunk: []u8) -> (state: JSONState) {
@@ -739,7 +748,11 @@ process_next_json_event :: proc(trace: ^Trace, jp: ^JSONParser, chunk: []u8) -> 
 				if in_key {
 					key_type, _ = km_find(&jp.obj_map, str)
 				} else {
-					process_key_value(trace, &ev, key_type, str)
+					ok := process_key_value(trace, &ev, key_type, str)
+					if !ok {
+						state = .InvalidFile
+						return
+					}
 					key_type = .Invalid
 				}
 			}
@@ -748,7 +761,11 @@ process_next_json_event :: proc(trace: ^Trace, jp: ^JSONParser, chunk: []u8) -> 
 		} else if next_state != .Primitive && in_primitive {
 			str := string(chunk[primitive_start:chunk_pos(p)])
 			if depth_count == 1 {
-				process_key_value(trace, &ev, key_type, str)
+				ok := process_key_value(trace, &ev, key_type, str)
+				if !ok {
+					state = .InvalidFile
+					return
+				}
 				key_type = .Invalid
 			}
 
@@ -782,7 +799,10 @@ process_next_json_event :: proc(trace: ^Trace, jp: ^JSONParser, chunk: []u8) -> 
 				p.pos += 1
 				state = .EventDone
 
-				process_event(trace, jp, &ev)
+				ok := process_event(trace, jp, &ev)
+				if !ok {
+					state = .InvalidFile
+				}
 				return
 			}
 		case .Colon: in_key = false
@@ -807,7 +827,7 @@ process_next_json_event :: proc(trace: ^Trace, jp: ^JSONParser, chunk: []u8) -> 
 	return
 }
 
-parse_json :: proc (trace: ^Trace, fd: os.Handle, chunk_buffer: []u8) {
+parse_json :: proc (trace: ^Trace, fd: os.Handle, chunk_buffer: []u8) -> bool {
 	p := &trace.parser
 	jp := init_json_parser()
 
@@ -817,7 +837,8 @@ parse_json :: proc (trace: ^Trace, fd: os.Handle, chunk_buffer: []u8) {
 	pre_loop: for p.pos <= i64(trace.total_size) {
 		state := the_skipper(trace, &jp, full_chunk)
 		if p.pos >= i64(trace.total_size) {
-			push_fatal(SpallError.InvalidFile)
+			post_error(trace, "Failed to read file!")
+			return false
 		}
 
 		#partial switch state {
@@ -825,13 +846,16 @@ parse_json :: proc (trace: ^Trace, fd: os.Handle, chunk_buffer: []u8) {
 			p.offset = p.pos
 			rd_sz, ok := get_chunk(p, fd, chunk_buffer)
 			if !ok {
-				push_fatal(SpallError.FileFailure)
+				post_error(trace, "Failed to read file!")
+				return false
 			}
 
 			full_chunk = chunk_buffer[:rd_sz]
 			continue
 		case .Finished:
 			break pre_loop
+		case .InvalidFile:
+			return false
 		}
 	}
 
@@ -851,13 +875,16 @@ parse_json :: proc (trace: ^Trace, fd: os.Handle, chunk_buffer: []u8) {
 			p.offset = p.pos
 			rd_sz, ok := get_chunk(p, fd, chunk_buffer)
 			if !ok {
-				push_fatal(SpallError.FileFailure)
+				post_error(trace, "Failed to read file!")
+				return false
 			}
 
 			full_chunk = chunk_buffer[:rd_sz]
 			continue
 		case .Finished:
 			break hot_loop
+		case .InvalidFile:
+			return false
 		}
 	}
 
@@ -883,8 +910,7 @@ parse_json :: proc (trace: ^Trace, fd: os.Handle, chunk_buffer: []u8) {
 	}
 
 	// TODO: free jp profiles
-
-	return
+	return true
 }
 
 json_patch_end :: proc(trace: ^Trace, p_idx, t_idx: int, e_idx: i64, end_time: f64) {
