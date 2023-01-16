@@ -92,8 +92,8 @@ free_trace :: proc(trace: ^Trace) {
 	delete(trace.file_name)
 }
 
-bound_duration :: proc(ev: $T, max_ts: f64) -> f64 {
-	return ev.duration == -1 ? (max_ts - ev.timestamp) : ev.duration
+bound_duration :: proc(ev: ^Event, max_ts: f64) -> f64 {
+	return ev.duration < 0 ? (max_ts - ev.timestamp) : ev.duration
 }
 
 find_idx :: proc(trace: ^Trace, events: []Event, val: f64) -> int {
@@ -136,15 +136,17 @@ append_event :: proc(events: ^[dynamic]Event, ev: ^Event, loc := #caller_locatio
 	return
 }
 
-gen_event_color :: proc(trace: ^Trace, events: []Event, thread_max: f64) -> (FVec3, f64) {
+gen_event_color :: proc(trace: ^Trace, _events: []Event, thread_max: f64) -> (FVec3, f64) {
 	total_weight : f64 = 0
+
+	events := _events
 
 	color := FVec3{}
 	color_weights := [len(trace.color_choices)]f64{}
-	for ev in events {
+	for ev in &events {
 		idx := name_color_idx(trace, ev.name.start)
 
-		duration := f64(bound_duration(ev, thread_max))
+		duration := f64(bound_duration(&ev, thread_max))
 		if duration <= 0 {
 			//fmt.printf("weird duration: %d, %#v\n", duration, ev)
 			duration = 0.1
@@ -227,7 +229,7 @@ chunk_events :: proc(trace: ^Trace) {
 
 					node := ChunkNode{}
 					node.start_time = start_ev.timestamp - trace.total_min_time
-					node.end_time   = end_ev.timestamp + bound_duration(end_ev, tm.max_time) - trace.total_min_time
+					node.end_time   = end_ev.timestamp + bound_duration(&end_ev, tm.max_time) - trace.total_min_time
 					node.start_idx  = uint(start_idx)
 					node.end_idx    = uint(end_idx)
 					node.arr_len = i8(len(scan_arr))
@@ -307,7 +309,7 @@ generate_selftimes :: proc(trace: ^Trace) {
 					stack_len := 0
 
 					start_time := ev.timestamp - trace.total_min_time
-					end_time := ev.timestamp + bound_duration(ev, tm.max_time) - trace.total_min_time
+					end_time := ev.timestamp + bound_duration(&ev, tm.max_time) - trace.total_min_time
 
 					child_time := 0.0
 					tree_stack[0] = depth.head; stack_len += 1
@@ -329,18 +331,18 @@ generate_selftimes :: proc(trace: ^Trace) {
 						if cur_node.child_count == 0 {
 							scan_arr := depth.events[cur_node.start_idx:cur_node.start_idx+uint(cur_node.arr_len)]
 							weight := 0.0
-							scan_loop: for scan_ev in scan_arr {
+							scan_loop: for scan_ev in &scan_arr {
 								scan_ev_start_time := scan_ev.timestamp - trace.total_min_time
 								if scan_ev_start_time < start_time {
 									continue
 								}
 
-								scan_ev_end_time := scan_ev.timestamp + bound_duration(scan_ev, tm.max_time) - trace.total_min_time
+								scan_ev_end_time := scan_ev.timestamp + bound_duration(&scan_ev, tm.max_time) - trace.total_min_time
 								if scan_ev_end_time > end_time {
 									break scan_loop
 								}
 
-								weight += bound_duration(scan_ev, tm.max_time)
+								weight += bound_duration(&scan_ev, tm.max_time)
 							}
 							child_time += weight
 							continue
@@ -351,7 +353,7 @@ generate_selftimes :: proc(trace: ^Trace) {
 						}
 					}
 
-					ev.self_time = bound_duration(ev, tm.max_time) - child_time
+					ev.self_time = bound_duration(&ev, tm.max_time) - child_time
 				}
 			}
 		}

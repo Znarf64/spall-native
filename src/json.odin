@@ -982,7 +982,9 @@ instant_rendersort_proc :: proc(a, b: Instant) -> bool {
 insertion_sort_events :: proc(events: []Event, max_time: f64) {
 	event_buildsort :: proc(max_time: f64, a, b: Event) -> bool {
 		if a.timestamp == b.timestamp {
-			return bound_duration(a, max_time) > bound_duration(b, max_time)
+			_a := a
+			_b := b
+			return bound_duration(&_a, max_time) > bound_duration(&_b, max_time)
 		}
 		return a.timestamp < b.timestamp
 	}
@@ -1023,7 +1025,7 @@ json_process_events :: proc(trace: ^Trace) {
 			stack_clear(&ev_stack)
 			for event, e_idx in &tm.events {
 				cur_start := event.timestamp
-				cur_end   := event.timestamp + bound_duration(event, tm.max_time)
+				cur_end   := event.timestamp + bound_duration(&event, tm.max_time)
 				if ev_stack.len == 0 {
 					stack_push_back(&ev_stack, e_idx)
 				} else {
@@ -1031,7 +1033,7 @@ json_process_events :: proc(trace: ^Trace) {
 					prev_ev := tm.events[prev_e_idx]
 
 					prev_start := prev_ev.timestamp
-					prev_end   := prev_ev.timestamp + bound_duration(prev_ev, tm.max_time)
+					prev_end   := prev_ev.timestamp + bound_duration(&prev_ev, tm.max_time)
 
 					// if it fits within the parent
 					if cur_start >= prev_start && cur_end <= prev_end {
@@ -1044,7 +1046,7 @@ json_process_events :: proc(trace: ^Trace) {
 							prev_ev = tm.events[prev_e_idx]
 
 							prev_start = prev_ev.timestamp
-							prev_end   = prev_ev.timestamp + bound_duration(prev_ev, tm.max_time)
+							prev_end   = prev_ev.timestamp + bound_duration(&prev_ev, tm.max_time)
 
 							if cur_start >= prev_start && cur_end > prev_end {
 								stack_pop_back(&ev_stack)
@@ -1108,7 +1110,7 @@ json_generate_selftimes :: proc(trace: ^Trace) {
 					stack_len := 0
 
 					start_time := ev.timestamp - trace.total_min_time
-					end_time := ev.timestamp + bound_duration(ev, tm.max_time) - trace.total_min_time
+					end_time := ev.timestamp + bound_duration(&ev, tm.max_time) - trace.total_min_time
 
 					child_time := 0.0
 					tree_stack[0] = depth.head; stack_len += 1
@@ -1130,18 +1132,18 @@ json_generate_selftimes :: proc(trace: ^Trace) {
 						if cur_node.child_count == 0 {
 							scan_arr := depth.events[cur_node.start_idx:cur_node.start_idx+uint(cur_node.arr_len)]
 							weight := 0.0
-							scan_loop: for scan_ev in scan_arr {
+							scan_loop: for scan_ev in &scan_arr {
 								scan_ev_start_time := scan_ev.timestamp - trace.total_min_time
 								if scan_ev_start_time < start_time {
 									continue
 								}
 
-								scan_ev_end_time := scan_ev.timestamp + bound_duration(scan_ev, tm.max_time) - trace.total_min_time
+								scan_ev_end_time := scan_ev.timestamp + bound_duration(&scan_ev, tm.max_time) - trace.total_min_time
 								if scan_ev_end_time > end_time {
 									break scan_loop
 								}
 
-								weight += bound_duration(scan_ev, tm.max_time)
+								weight += bound_duration(&scan_ev, tm.max_time)
 							}
 							child_time += weight
 							continue
@@ -1152,7 +1154,7 @@ json_generate_selftimes :: proc(trace: ^Trace) {
 						}
 					}
 
-					ev.self_time = bound_duration(ev, tm.max_time) - child_time
+					ev.self_time = bound_duration(&ev, tm.max_time) - child_time
 				}
 			}
 		}

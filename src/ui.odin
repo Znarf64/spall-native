@@ -433,7 +433,7 @@ draw_rect_tooltip :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^U
 	depth := thread.depths[ids.did]
 	ev := depth.events[ids.eid]
 
-	duration := bound_duration(ev, thread.max_time)
+	duration := bound_duration(&ev, thread.max_time)
 
 	rect_tooltip_name := in_getstr(&trace.string_block, ev.name)
 	if ev.duration == -1 {
@@ -670,9 +670,9 @@ draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRe
 						y := ui_state.rect_height * f64(d_idx)
 						h := ui_state.rect_height
 
-						for ev, de_id in scan_arr {
+						for ev, de_id in &scan_arr {
 							x := ev.timestamp - trace.total_min_time
-							duration := bound_duration(ev, thread.max_time)
+							duration := bound_duration(&ev, thread.max_time)
 							w := max(duration * cam.current_scale, 2.0)
 							xm := x * cam.target_scale
 
@@ -868,9 +868,9 @@ draw_global_activity :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, highlight
 				// we're at a bottom node, draw the whole thing
 				if cur_node.child_count == 0 {
 					scan_arr := depth.events[cur_node.start_idx:cur_node.start_idx+uint(cur_node.arr_len)]
-					for ev, de_id in scan_arr {
+					for ev, de_id in &scan_arr {
 						x := ev.timestamp - trace.total_min_time
-						duration := bound_duration(ev, thread.max_time)
+						duration := bound_duration(&ev, thread.max_time)
 						w := max(duration * wide_scale_x, 2.0)
 						xm := x * wide_scale_x
 
@@ -1003,9 +1003,9 @@ draw_minimap :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIStat
 					// we're at a bottom node, draw the whole thing
 					if cur_node.child_count == 0 {
 						scan_arr := depth.events[cur_node.start_idx:cur_node.start_idx+uint(cur_node.arr_len)]
-						for ev, de_id in scan_arr {
+						for ev, de_id in &scan_arr {
 							x := ev.timestamp - trace.total_min_time
-							duration := bound_duration(ev, thread.max_time)
+							duration := bound_duration(&ev, thread.max_time)
 							w := max(duration * x_scale, 2.0)
 							xm := x * x_scale
 
@@ -1190,7 +1190,7 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, info_line_count: in
 			draw_text(rects, fmt.tprintf(" user data: %s", in_getstr(&trace.string_block, event.args)), Vec2{x_subpad, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 		}
 		draw_text(rects, fmt.tprintf("start time:%s", time_fmt(event.timestamp - trace.total_min_time)), Vec2{x_subpad, next_line(&y, em)}, .PSize, .MonoFont, text_color)
-		draw_text(rects, fmt.tprintf("  duration:%s", time_fmt(bound_duration(event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, .PSize, .MonoFont, text_color)
+		draw_text(rects, fmt.tprintf("  duration:%s", time_fmt(bound_duration(&event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 		draw_text(rects, fmt.tprintf(" self time:%s", time_fmt(event.self_time)), Vec2{x_subpad, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 
 	// If we've got stats cooking already
@@ -1590,7 +1590,7 @@ process_multiselect :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, pan_delta:
 						ev := scan_arr[i]
 						x := ev.timestamp - trace.total_min_time
 
-						duration := bound_duration(ev, thread.max_time)
+						duration := bound_duration(&ev, thread.max_time)
 						w := duration * cam.current_scale
 
 						r := rect(x, y, w, h)
@@ -1611,7 +1611,7 @@ process_multiselect :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, pan_delta:
 						ev := scan_arr[i]
 						x := ev.timestamp - trace.total_min_time
 
-						duration := bound_duration(ev, thread.max_time)
+						duration := bound_duration(&ev, thread.max_time)
 						w := duration * cam.current_scale
 
 						r := rect(x, y, w, h)
@@ -1653,14 +1653,14 @@ process_multiselect :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, pan_delta:
 				thread := trace.processes[range.pid].threads[range.tid]
 				events := thread.depths[range.did].events[start_idx:range.end]
 
-				for ev, e_idx in events {
+				for ev, e_idx in &events {
 					if event_count > iter_max {
 						cur_stat_offset = StatOffset{r_idx, start_idx + e_idx}
 						broke_early = true
 						break pass1_range_loop
 					}
 
-					duration := bound_duration(ev, thread.max_time)
+					duration := bound_duration(&ev, thread.max_time)
 					name := in_getstr(&trace.string_block, ev.name)
 					s, ok := sm_get(&trace.stats, ev.name)
 					if !ok {
@@ -1697,14 +1697,14 @@ process_multiselect :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, pan_delta:
 				thread := trace.processes[range.pid].threads[range.tid]
 				events := thread.depths[range.did].events[start_idx:range.end]
 
-				for ev, e_idx in events {
+				for ev, e_idx in &events {
 					if event_count > iter_max {
 						cur_stat_offset = StatOffset{r_idx, start_idx + e_idx}
 						broke_early = true
 						break pass2_range_loop
 					}
 
-					duration := bound_duration(ev, thread.max_time)
+					duration := bound_duration(&ev, thread.max_time)
 					name := in_getstr(&trace.string_block, ev.name)
 					s, ok := sm_get(&trace.stats, ev.name)
 
