@@ -60,6 +60,16 @@ get_next_event :: proc(trace: ^Trace, chunk: []u8, temp_ev: ^TempEvent) -> Binar
 		
 		p.pos += event_sz
 		return .EventRead
+	case .Pad_Skip:
+		event_sz := i64(size_of(spall.Pad_Skip))
+		if chunk_pos(p) + event_sz > i64(len(chunk)) {
+			return .PartialRead
+		}
+		event := (^spall.Pad_Skip)(raw_data(data_start))
+
+		temp_ev.type = .Pad_Skip
+		p.pos += event_sz + i64(event.size)
+		return .EventRead
 	case:
 		return .Failure
 	}

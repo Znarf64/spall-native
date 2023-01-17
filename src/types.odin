@@ -149,6 +149,7 @@ EventType :: enum {
 	End,
 	Metadata,
 	Sample,
+	Pad_Skip,
 }
 EventScope :: enum {
 	Global,

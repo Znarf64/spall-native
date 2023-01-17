@@ -19,6 +19,7 @@ Event_Type :: enum u8 {
 	Instant             = 5,
 
 	Overwrite_Timestamp = 6, // Retroactively change timestamp units - useful for incrementally improving RDTSC frequency.
+	Pad_Skip            = 7,
 }
 
 Begin_Event :: struct #packed {
@@ -36,4 +37,9 @@ End_Event :: struct #packed {
 	pid:  u32,
 	tid:  u32,
 	time: f64,
+}
+
+Pad_Skip :: struct #packed {
+	type: Event_Type,
+	size:  u32,
 }
