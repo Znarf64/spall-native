@@ -23,7 +23,7 @@ as_get_next_buffer :: proc(trace: ^Trace, chunk: []u8, buffer_header: ^spall.Buf
 	return .EventRead
 }
 
-as_get_next_event :: proc(trace: ^Trace, chunk: []u8, temp_ev: ^TempEvent) -> BinaryState {
+as_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, thread: ^Thread) -> BinaryState {
 	p := &trace.parser
 
 	min_sz := i64(size_of(u64))
@@ -42,14 +42,52 @@ as_get_next_event :: proc(trace: ^Trace, chunk: []u8, temp_ev: ^TempEvent) -> Bi
 		}
 
 		event := (^spall.MicroBegin_Event)(raw_data(data_start))
-		temp_ev.type = .MicroBegin
-		temp_ev.timestamp = f64((event.time_and_type << 8) >> 8)
 
 		tmp_buf := [34]byte{}
 		tmp_buf[0] = '0'
 		tmp_buf[1] = 'x'
 		name_str := strconv.append_uint(tmp_buf[2:], event.address, 16)
-		temp_ev.name = in_get(&p.intern, &trace.string_block, string(tmp_buf[:len(name_str)+2]))
+
+		timestamp := f64((event.time_and_type << 8) >> 8)
+		name := in_get(&p.intern, &trace.string_block, string(tmp_buf[:len(name_str)+2]))
+
+		ev := Event{
+			name = name,
+			args = INStr{0, 0},
+			duration = -1,
+			timestamp = f64(timestamp) * trace.stamp_scale,
+			self_time = 0,
+		}
+
+		if thread.max_time > ev.timestamp {
+			post_error(trace, 
+				"Woah, time-travel? You just had a begin event that started before a previous one; [pid: %d, tid: %d, name: %s, event: %v, event_count: %d]", 
+				0, thread.thread_id, in_getstr(&trace.string_block, ev.name), ev, trace.event_count)
+			return .Failure
+		}
+
+		process.min_time = min(process.min_time, ev.timestamp)
+		thread.min_time = min(thread.min_time, ev.timestamp)
+		thread.max_time = ev.timestamp + ev.duration
+
+		trace.total_min_time = min(trace.total_min_time, ev.timestamp)
+		trace.total_max_time = max(trace.total_max_time, ev.timestamp + ev.duration)
+
+		if int(thread.current_depth) >= len(thread.depths) {
+			depth := Depth{
+				events = make([dynamic]Event),
+			}
+			append(&thread.depths, depth)
+		}
+
+		depth := &thread.depths[thread.current_depth]
+		thread.current_depth += 1
+		append_event(&depth.events, &ev)
+
+		ev_idx := len(depth.events)-1
+		ev_data := EVData{idx = ev_idx, depth = thread.current_depth - 1}
+		stack_push_back(&thread.bande_q, ev_data)
+		trace.event_count += 1
 
 		p.pos += event_sz
 		return .EventRead
@@ -58,10 +96,30 @@ as_get_next_event :: proc(trace: ^Trace, chunk: []u8, temp_ev: ^TempEvent) -> Bi
 		if chunk_pos(p) + event_sz > i64(len(chunk)) {
 			return .PartialRead
 		}
+
 		event := (^spall.MicroEnd_Event)(raw_data(data_start))
 
-		temp_ev.type = .MicroEnd
-		temp_ev.timestamp = f64((event.time_and_type << 8) >> 8)
+		timestamp := f64((event.time_and_type << 8) >> 8)
+
+		if thread.bande_q.len > 0 {
+			jev_data := stack_pop_back(&thread.bande_q)
+			thread.current_depth -= 1
+
+			depth := &thread.depths[thread.current_depth]
+			jev := &depth.events[jev_data.idx]
+			jev.duration = (timestamp * trace.stamp_scale) - jev.timestamp
+			jev.self_time = jev.duration - jev.self_time
+			thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)
+			trace.total_max_time = max(trace.total_max_time, jev.timestamp + jev.duration)
+
+			if thread.bande_q.len > 0 {
+				parent_depth := &thread.depths[thread.current_depth - 1]
+				parent_ev := stack_peek_back(&thread.bande_q)
+
+				pev := &parent_depth.events[parent_ev.idx]
+				pev.self_time += jev.duration
+			}
+		}
 		
 		p.pos += event_sz
 		return .EventRead
@@ -73,10 +131,9 @@ as_get_next_event :: proc(trace: ^Trace, chunk: []u8, temp_ev: ^TempEvent) -> Bi
 	return .PartialRead
 }
 
+
 as_parse :: proc(trace: ^Trace, fd: os.Handle, chunk_buffer: []u8, read_size: i64) -> bool {
-	temp_ev := TempEvent{}
 	buffer_header := spall.BufferHeader{}
-	ev := Event{}
 	p := &trace.parser
 
 	proc_idx := setup_pid(trace, 0)
@@ -85,8 +142,6 @@ as_parse :: proc(trace: ^Trace, fd: os.Handle, chunk_buffer: []u8, read_size: i6
 	last_read: i64 = 0
 	full_chunk := chunk_buffer[:read_size]
 	buffer_loop: for p.pos < trace.total_size {
-		mem.zero(&buffer_header, size_of(spall.BufferHeader))
-
 		state := as_get_next_buffer(trace, full_chunk, &buffer_header)
 		#partial switch state {
 		case .PartialRead:
@@ -116,8 +171,7 @@ as_parse :: proc(trace: ^Trace, fd: os.Handle, chunk_buffer: []u8, read_size: i6
 
 		buffer_end := p.pos + i64(buffer_header.size)
 		ev_loop: for p.pos < buffer_end {
-			mem.zero(&temp_ev, size_of(TempEvent))
-			state := as_get_next_event(trace, full_chunk, &temp_ev)
+			state := as_parse_next_event(trace, full_chunk, process, thread)
 
 			#partial switch state {
 			case .PartialRead:
@@ -140,65 +194,6 @@ as_parse :: proc(trace: ^Trace, fd: os.Handle, chunk_buffer: []u8, read_size: i6
 				continue ev_loop
 			case .Failure:
 				return false
-			}
-
-			#partial switch temp_ev.type {
-			case .MicroBegin:
-				ev.name = temp_ev.name
-				ev.duration = -1
-				ev.self_time = 0
-				ev.timestamp = temp_ev.timestamp * trace.stamp_scale
-
-				if thread.max_time > ev.timestamp {
-					post_error(trace, 
-						"Woah, time-travel? You just had a begin event that started before a previous one; [pid: %d, tid: %d, name: %s, event: %v, event_count: %d]", 
-						0, buffer_header.tid, in_getstr(&trace.string_block, ev.name), ev, trace.event_count)
-					return false
-				}
-
-				process.min_time = min(process.min_time, ev.timestamp)
-				thread.min_time = min(thread.min_time, ev.timestamp)
-				thread.max_time = ev.timestamp + ev.duration
-
-				trace.total_min_time = min(trace.total_min_time, ev.timestamp)
-				trace.total_max_time = max(trace.total_max_time, ev.timestamp + ev.duration)
-
-				if int(thread.current_depth) >= len(thread.depths) {
-					depth := Depth{
-						events = make([dynamic]Event),
-					}
-					append(&thread.depths, depth)
-				}
-
-				depth := &thread.depths[thread.current_depth]
-				thread.current_depth += 1
-				append_event(&depth.events, &ev)
-
-				ev_idx := len(depth.events)-1
-				ev_data := EVData{idx = ev_idx, depth = thread.current_depth - 1}
-				stack_push_back(&thread.bande_q, ev_data)
-				trace.event_count += 1
-			case .MicroEnd:
-				if thread.bande_q.len > 0 {
-					jev_data := stack_pop_back(&thread.bande_q)
-					thread.current_depth -= 1
-
-					depth := &thread.depths[thread.current_depth]
-					jev := &depth.events[jev_data.idx]
-					jev.duration = (temp_ev.timestamp * trace.stamp_scale) - jev.timestamp
-					jev.self_time = jev.duration - jev.self_time
-					thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)
-					trace.total_max_time = max(trace.total_max_time, jev.timestamp + jev.duration)
-
-					if thread.bande_q.len > 0 {
-						parent_depth := &thread.depths[thread.current_depth - 1]
-						parent_ev := stack_peek_back(&thread.bande_q)
-
-						pev := &parent_depth.events[parent_ev.idx]
-
-						pev.self_time += jev.duration
-					}
-				}
 			}
 		}
 	}

@@ -392,7 +392,7 @@ load_file :: proc(trace: ^Trace, file_name: string) {
 	}
 	defer os.close(trace_fd)
 
-	chunk_buffer := make([]u8, 1 * 1024 * 1024)
+	chunk_buffer := make([]u8, 4 * 1024 * 1024)
 	defer delete(chunk_buffer)
 
 	total_size, err2 := os.file_size(trace_fd)

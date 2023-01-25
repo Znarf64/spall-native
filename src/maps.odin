@@ -107,11 +107,6 @@ vh_insert :: proc(v: ^ValHash, key: u32, val: int) {
 
 INMAP_LOAD_FACTOR :: 0.75
 
-INStr :: struct #packed {
-	start: int,
-	len: u16,
-}
-
 // String interning
 INMap :: struct {
 	entries: [dynamic]INStr,

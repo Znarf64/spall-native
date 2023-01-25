@@ -16,6 +16,11 @@ Rect :: struct {
 	h: f64,
 }
 
+INStr :: struct #packed {
+	start: int,
+	len: u16,
+}
+
 UIState :: struct {
 	width: f64,
 	height: f64,
