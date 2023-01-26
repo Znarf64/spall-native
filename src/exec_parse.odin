@@ -60,6 +60,8 @@ MACH_MAGIC_64 :: 0xfeedfacf
 PE32_MAGIC    := []u8{ 0x5a, 0x4d }
 
 load_executable :: proc(trace: ^Trace, file_name: string) -> bool {
+	fmt.printf("Loading symbols from %s\n", file_name)
+
 	exec_buffer, ok := os.read_entire_file_from_filename(file_name)
 	if !ok {
 		post_error(trace, "Failed to load %s!", file_name)

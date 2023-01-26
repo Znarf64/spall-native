@@ -15,6 +15,7 @@ Auto_Header :: struct #packed {
 	version:        u64,
 	timestamp_unit: f64,
 	known_address:  u64,
+	program_path_len: u16,
 }
 
 Manual_Event_Type :: enum u8 {

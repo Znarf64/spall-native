@@ -446,8 +446,19 @@ load_file :: proc(trace: ^Trace, file_name: string) {
 		
 		trace.stamp_scale = hdr.timestamp_unit
 
+		if total_size < i64(size_of(spall.Auto_Header)) + i64(hdr.program_path_len) {
+			post_error(trace, "%s is invalid!", file_name)
+			return
+		}
+
+		symbol_path := string(full_chunk[size_of(spall.Auto_Header):size_of(spall.Auto_Header)+hdr.program_path_len])
+
 		p := &trace.parser
-		p.pos += size_of(spall.Auto_Header)
+		p.pos += size_of(spall.Auto_Header) + i64(hdr.program_path_len)
+
+		if !load_executable(trace, symbol_path) {
+			return
+		}
 
 		file_type = .AutoStream
 	} else {
