@@ -55,7 +55,7 @@ as_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, threa
 
 		ev := Event{
 			name = name,
-			args = INStr{0, 0},
+			args = 0,
 			duration = -1,
 			timestamp = f64(timestamp) * trace.stamp_scale,
 			self_time = 0,

@@ -451,12 +451,15 @@ draw_rect_tooltip :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^U
 	name_width := measure_text(rect_tooltip_name, .PSize, .DefaultFont)
 	stats_width := measure_text(rect_tooltip_stats, .PSize, .DefaultFont)
 
-	args := in_getstr(&trace.string_block, ev.args)
-	args_width := measure_text(args, .PSize, .DefaultFont)
-
-	rect_width := max(name_width + em + stats_width + em, args_width + em)
 	rect_height := text_height + (1.25 * em)
-	if len(args) > 0 {
+	rect_width := name_width + em + stats_width + em
+
+	args := ""
+	args_width : f64 = 0
+	if ev.args > 0 {
+		args = in_getstr(&trace.string_block, ev.args)
+		args_width = measure_text(args, .PSize, .DefaultFont)
+		rect_width = max(rect_width, args_width + em)
 		next_line(&rect_height, em)
 	}
 
@@ -545,7 +548,7 @@ draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRe
 		if len(trace.processes) > 1 {
 			if cur_y > full_flamegraph_rect.y {
 				row_text: string
-				if proc_v.name.len > 0 {
+				if proc_v.name > 0 {
 					row_text = fmt.tprintf("%s (PID %d)", in_getstr(&trace.string_block, proc_v.name), proc_v.process_id)
 				} else {
 					row_text = fmt.tprintf("PID: %d", proc_v.process_id)
@@ -575,7 +578,7 @@ draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRe
 
 			if last_cur_y > full_flamegraph_rect.y {
 				row_text: string
-				if thread.name.len > 0 {
+				if thread.name > 0 {
 					row_text = fmt.tprintf("%s (TID %d)", in_getstr(&trace.string_block, thread.name), thread.thread_id)
 				} else {
 					row_text = fmt.tprintf("TID: %d", thread.thread_id)
@@ -696,7 +699,7 @@ draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRe
 							}
 
 							ev_name := in_getstr(&trace.string_block, ev.name)
-							idx := name_color_idx(trace, ev.name.start)
+							idx := name_color_idx(trace, ev.name)
 							rect_color := trace.color_choices[idx]
 							e_idx := int(cur_node.event_start_idx) + de_id
 
@@ -1021,7 +1024,7 @@ draw_minimap :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIStat
 							r_x    = max(r_x, 0)
 							r_w   := end_x - r_x
 
-							idx := name_color_idx(trace, ev.name.start)
+							idx := name_color_idx(trace, ev.name)
 							rect_color := trace.color_choices[idx]
 							e_idx := int(cur_node.event_start_idx) + de_id
 
@@ -1185,8 +1188,10 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, info_line_count: in
 		thread := trace.processes[p_idx].threads[t_idx]
 		event := thread.depths[d_idx].events[e_idx]
 		draw_text(rects, in_getstr(&trace.string_block, event.name), Vec2{x_subpad, next_line(&y, em)}, .PSize, .MonoFont, text_color)
-		if event.args.len > 0 {
-			draw_text(rects, fmt.tprintf(" user data: %s", in_getstr(&trace.string_block, event.args)), Vec2{x_subpad, next_line(&y, em)}, .PSize, .MonoFont, text_color)
+
+		if event.args > 0 {
+			args_str := in_getstr(&trace.string_block, event.args)
+			draw_text(rects, fmt.tprintf(" user data: %s", args_str), Vec2{x_subpad, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 		}
 		draw_text(rects, fmt.tprintf("start time:%s", time_fmt(event.timestamp - trace.total_min_time)), Vec2{x_subpad, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 		draw_text(rects, fmt.tprintf("  duration:%s", time_fmt(bound_duration(&event, thread.max_time))), Vec2{x_subpad, next_line(&y, em)}, .PSize, .MonoFont, text_color)
@@ -1295,14 +1300,14 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, info_line_count: in
 			}
 
 			if clicked && pt_in_rect(clicked_pos, click_rect) {
-				if selected_func.start == name.start {
-					selected_func.start = -1
+				if selected_func == name {
+					selected_func = 0
 				} else {
 					selected_func = name
 				}
 			}
 
-			if selected_func.start == name.start {
+			if selected_func == name {
 				draw_rect(rects, click_rect, highlight_color)
 			}
 
@@ -1339,14 +1344,14 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, info_line_count: in
 
 			name_str := in_getstr(&trace.string_block, name)
 			name_width := measure_text(name_str, .PSize, .MonoFont)
-			tmp_color := trace.color_choices[name_color_idx(trace, name.start)]
+			tmp_color := trace.color_choices[name_color_idx(trace, name)]
 			draw_rect(rects, dr, BVec4{u8(tmp_color.x), u8(tmp_color.y), u8(tmp_color.z), 255})
 			draw_text(rects, name_str, Vec2{cursor, y_before + (em / 3)}, .PSize, .MonoFont, text_color)
 
 			next_line(&y, em)
 		}
 
-		if selected_func.start != -1 {
+		if selected_func > 0 {
 			histogram_height := 18 * em
 			line_gap := (em / 1.5)
 			edge_gap := (em / 2)

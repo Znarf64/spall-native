@@ -47,7 +47,7 @@ JSONParser :: struct {
 SampleNode :: struct {
 	id: i64,
 	parent: i64,
-	name: INStr,
+	name: u32,
 	is_other: bool,
 }
 
@@ -600,7 +600,7 @@ process_sample :: proc(trace: ^Trace, jp: ^JSONParser, ev: ^TempEvent) -> bool {
 					node_id := nodes_to_begin[i]
 					node := profile.nodes[node_id]
 
-					if node.name.len == 0 {
+					if node.name == 0 {
 						node.name = in_get(&trace.intern, &trace.string_block, "(anonymous)")
 					}
 

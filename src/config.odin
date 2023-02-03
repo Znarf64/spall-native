@@ -136,7 +136,7 @@ gen_event_color :: proc(trace: ^Trace, _events: []Event, thread_max: f64) -> (FV
 	color := FVec3{}
 	color_weights := [len(trace.color_choices)]f64{}
 	for ev in &events {
-		idx := name_color_idx(trace, ev.name.start)
+		idx := name_color_idx(trace, ev.name)
 
 		duration := f64(bound_duration(&ev, thread_max))
 		if duration <= 0 {
@@ -373,10 +373,13 @@ load_file :: proc(trace: ^Trace, file_name: string) {
 		file_name = file_name,
 		string_block = make([dynamic]u8),
 		intern = in_init(),
-		addr_map = make(map[u64]INStr),
+		addr_map = make(map[u64]u32),
 		parser = Parser{},
 		error_message = "",
 	}
+	// deliberately setting the first elem to 0, to simplify string interactions
+	append_elem(&trace.string_block, 0)
+	append_elem(&trace.string_block, 0)
 
 	trace_fd, err := os.open(file_name)
 	if err != 0 {

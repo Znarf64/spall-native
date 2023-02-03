@@ -16,11 +16,6 @@ Rect :: struct {
 	h: f64,
 }
 
-INStr :: struct #packed {
-	start: i32,
-	len: u16,
-}
-
 UIState :: struct {
 	width: f64,
 	height: f64,
@@ -136,7 +131,7 @@ StatState :: enum {
 	Finished,
 }
 StatEntry :: struct {
-	key: INStr,
+	key: u32,
 	val: Stats,
 }
 SortState :: enum {
@@ -176,16 +171,16 @@ TempEvent :: struct {
 	timestamp: f64,
 	thread_id: u32,
 	process_id: u32,
-	name: INStr,
-	args: INStr,
+	name: u32,
+	args: u32,
 }
 Instant :: struct #packed {
-	name: INStr,
+	name: u32,
 	timestamp: f64,
 }
 Event :: struct #packed {
-	name: INStr,
-	args: INStr,
+	name: u32,
+	args: u32,
 	timestamp: f64,
 	duration: f64,
 	self_time: f64,
@@ -200,7 +195,7 @@ Trace :: struct {
 	string_block: [dynamic]u8,
 
 	skew_address: u64,
-	addr_map: map[u64]INStr,
+	addr_map: map[u64]u32,
 	color_choices: [16]FVec3,
 
 	processes: [dynamic]Process,
@@ -251,7 +246,7 @@ Thread :: struct {
 	current_depth: u16,
 
 	thread_id: u32,
-	name: INStr,
+	name: u32,
 
 	events: [dynamic]Event,
 	depths: [dynamic]Depth,
@@ -262,7 +257,7 @@ Thread :: struct {
 
 Process :: struct {
 	min_time: f64,
-	name: INStr,
+	name: u32,
 
 	process_id: u32,
 	threads: [dynamic]Thread,

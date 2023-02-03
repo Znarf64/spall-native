@@ -107,8 +107,8 @@ set_color_mode :: proc(auto: bool, is_dark: bool) {
 }
 
 // color_choices must be power of 2
-name_color_idx :: proc(trace: ^Trace, name_idx: i32) -> u32 {
-	return u32(name_idx) & u32(len(trace.color_choices) - 1)
+name_color_idx :: proc(trace: ^Trace, name_idx: u32) -> u32 {
+	return name_idx & u32(len(trace.color_choices) - 1)
 }
 
 generate_color_choices :: proc(trace: ^Trace) {
