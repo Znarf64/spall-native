@@ -43,7 +43,6 @@ as_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, threa
 
 		event := (^spall.MicroBegin_Event)(raw_data(data_start))
 
-		timestamp := f64((event.time_and_type << 8) >> 8)
 		name, ok := am_find(&trace.addr_map, event.address)
 		if !ok {
 			tmp_buf := [34]byte{}
@@ -53,12 +52,12 @@ as_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, threa
 			name = in_get(&trace.intern, &trace.string_block, string(tmp_buf[:len(name_str)+2]))
 		}
 
+		timestamp := f64((event.time_and_type << 8) >> 8)
+		scaled_stamp := timestamp * trace.stamp_scale
 		ev := Event{
 			name = name,
-			args = 0,
 			duration = -1,
-			timestamp = f64(timestamp) * trace.stamp_scale,
-			self_time = 0,
+			timestamp = scaled_stamp,
 		}
 
 		if thread.max_time > ev.timestamp {
