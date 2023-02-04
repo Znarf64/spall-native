@@ -99,39 +99,39 @@ ease_in_out :: proc(t: f32) -> f32 {
     return -(math.cos(math.PI * t) - 1) / 2;
 }
 
-ONE_MINUTE :: 1000 * 1000 * 60
-ONE_SECOND :: 1000 * 1000
-ONE_MILLI :: 1000
-ONE_MICRO :: 1
-ONE_NANO :: 0.001
+ONE_MINUTE :: 1000 * 1000 * 1000 * 60
+ONE_SECOND :: 1000 * 1000 * 1000
+ONE_MILLI  :: 1000 * 1000
+ONE_MICRO  :: 1000
+ONE_NANO   :: 1
 
 tooltip_fmt :: proc(time: f64) -> string {
-	if time > ONE_SECOND {
+	if time >= ONE_SECOND {
 		cur_time := time / ONE_SECOND
 		return fmt.tprintf("%.1f s ", cur_time)
-	} else if time > ONE_MILLI {
+	} else if time >= ONE_MILLI {
 		cur_time := time / ONE_MILLI
 		return fmt.tprintf("%.1f ms", cur_time)
 	} else if time >= ONE_MICRO {
-		return fmt.tprintf("%.1f μs", time)
+		cur_time := time / ONE_MICRO
+		return fmt.tprintf("%.1f μs", cur_time)
 	} else {
-		cur_time := time / ONE_NANO
-		return fmt.tprintf("%.1f ns", cur_time)
+		return fmt.tprintf("%.1f ns", time)
 	}
 }
 
 stat_fmt :: proc(time: f64) -> string {
-	if time > ONE_SECOND {
+	if time >= ONE_SECOND {
 		cur_time := time / ONE_SECOND
 		return fmt.tprintf("%.1f s ", cur_time)
-	} else if time > ONE_MILLI {
+	} else if time >= ONE_MILLI {
 		cur_time := time / ONE_MILLI
 		return fmt.tprintf("%.1f ms", cur_time)
 	} else if time >= ONE_MICRO {
-		return fmt.tprintf("%.1f us", time) // μs
+		cur_time := time / ONE_MICRO
+		return fmt.tprintf("%.1f us", cur_time) // μs
 	} else {
-		cur_time := time / ONE_NANO
-		return fmt.tprintf("%.1f ns", cur_time)
+		return fmt.tprintf("%.1f ns", time)
 	}
 }
 
@@ -163,15 +163,14 @@ time_fmt :: proc(time: f64) -> string {
 		strings.write_string(&b, "ms")
 	} 
 
-	micros := math.floor(math.mod(time, 1000))
+	micros := math.floor(math.mod(time / ONE_MICRO, 1000))
 	if micros > 0 && micros < 1000 {
 		strings.write_byte(&b, ' ')
 		my_write_float(&b, micros, 0)
 		strings.write_string(&b, "μs")
 	}
 
-	_, nanos := math.modf(time)
-	nanos = math.floor(nanos * 1000)
+	nanos := math.floor(math.mod(time, 1000))
 	if (nanos > 0 && nanos < 1000) || time == 0 {
 		strings.write_byte(&b, ' ')
 		my_write_float(&b, nanos, 0)
@@ -179,7 +178,7 @@ time_fmt :: proc(time: f64) -> string {
 	}
 
 	_, picos := math.modf(time)
-	picos = math.floor(picos * 1000000)
+	picos = math.floor(picos * 1000)
 	if (picos > 0 && picos < 1000) {
 		strings.write_byte(&b, ' ')
 		my_write_float(&b, picos, 0)
@@ -200,12 +199,10 @@ measure_fmt :: proc(time: f64) -> string {
 	b := strings.builder_make(context.temp_allocator)
 
 	_, picos := math.modf(time)
-	picos = math.floor(picos * 1_000_000)
+	picos = math.floor(picos * 1000)
 
-	_, nanos := math.modf(time)
-	nanos = math.floor(nanos * 1000)
-
-	micros := math.floor(math.mod(time, 1000))
+	nanos := math.floor(math.mod(time, 1000))
+	micros := math.floor(math.mod(time / ONE_MICRO, 1000))
 	millis := math.floor(math.mod(time / ONE_MILLI, 1000))
 	secs := math.floor(math.mod(time / ONE_SECOND, 60))
 	mins := math.floor(math.mod(time / ONE_MINUTE, 60))
@@ -320,12 +317,4 @@ trunc_string :: proc(str: string, pad, max_width: f64) -> string {
 	}
 
 	return chopped_str
-}
-
-ticks_to_time :: #force_inline proc(trace: ^Trace, ticks: i64) -> f64 {
-	return f64(ticks) * trace.stamp_scale
-}
-
-time_to_ticks :: #force_inline proc(trace: ^Trace, ts: f64) -> i64 {
-	return i64(ts / trace.stamp_scale)
 }

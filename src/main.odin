@@ -122,7 +122,7 @@ reset_flamegraph_camera :: proc(trace: ^Trace, ui_state: ^UIState) {
 	if trace.event_count == 0 { trace.total_min_time = 0; trace.total_max_time = 1000 }
 
 	start_time: f64 = 0
-	end_time  := ticks_to_time(trace, trace.total_max_time - trace.total_min_time)
+	end_time  := f64(trace.total_max_time - trace.total_min_time)
 
 	side_pad  := 2 * em
 

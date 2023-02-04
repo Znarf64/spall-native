@@ -33,7 +33,7 @@ ms_get_next_event :: proc(trace: ^Trace, chunk: []u8, temp_ev: ^TempEvent) -> Bi
 		name := string(data_start[event_sz:event_sz+i64(event.name_len)])
 
 		temp_ev.type = .Begin
-		temp_ev.timestamp = i64(event.time * 1000)
+		temp_ev.timestamp = i64(event.time * 1000 * trace.stamp_scale)
 		temp_ev.thread_id = event.tid
 		temp_ev.process_id = event.pid
 		temp_ev.name = in_get(&trace.intern, &trace.string_block, name)
@@ -48,7 +48,7 @@ ms_get_next_event :: proc(trace: ^Trace, chunk: []u8, temp_ev: ^TempEvent) -> Bi
 		event := (^spall.End_Event)(raw_data(data_start))
 
 		temp_ev.type = .End
-		temp_ev.timestamp = i64(event.time * 1000)
+		temp_ev.timestamp = i64(event.time * 1000 * trace.stamp_scale)
 		temp_ev.thread_id = event.tid
 		temp_ev.process_id = event.pid
 		
@@ -110,8 +110,6 @@ ms_parse :: proc(trace: ^Trace, fd: os.Handle, chunk_buffer: []u8, read_size: i6
 	temp_ev := TempEvent{}
 	ev := Event{}
 	p := &trace.parser
-
-	trace.stamp_scale /= 1000
 
 	last_read: i64 = 0
 	full_chunk := chunk_buffer[:read_size]

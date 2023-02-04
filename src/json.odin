@@ -406,14 +406,14 @@ process_key_value :: proc(trace: ^Trace, ev: ^TempEvent, key: FieldType, value: 
 			post_error(trace, "Invalid duration!")
 			return false
 		}
-		ev.duration = i64(dur * 1000)
+		ev.duration = i64(dur * 1000 * trace.stamp_scale)
 	case .Ts: 
 		ts, ok := parse_f64(value)
 		if !ok {
 			post_error(trace, "Invalid timestamp!")
 			return false
 		}
-		ev.timestamp = i64(ts * 1000)
+		ev.timestamp = i64(ts * 1000 * trace.stamp_scale)
 	case .Tid: 
 		tid, ok := parse_u32(value)
 		if !ok {
@@ -476,7 +476,7 @@ process_sample :: proc(trace: ^Trace, jp: ^JSONParser, ev: ^TempEvent) -> bool {
 		ps := ProfileState{
 			pid = ev.process_id,
 			tid = ev.thread_id,
-			time = i64(start_time_us * 1000),
+			time = i64(start_time_us * 1000 * trace.stamp_scale),
 			nodes = make(map[i64]SampleNode, 16),
 		}
 		stack_init(&ps.id_stack)
@@ -527,7 +527,7 @@ process_sample :: proc(trace: ^Trace, jp: ^JSONParser, ev: ^TempEvent) -> bool {
 				continue
 			}
 
-			profile.time += i64(delta * 1000)
+			profile.time += i64(f64(delta * 1000) * trace.stamp_scale)
 			stack_top_id : i64 = 0
 			if profile.id_stack.len > 0 {
 				tmp := stack_peek_back(&profile.id_stack)
@@ -830,8 +830,6 @@ process_next_json_event :: proc(trace: ^Trace, jp: ^JSONParser, chunk: []u8) -> 
 json_parse :: proc (trace: ^Trace, fd: os.Handle, chunk_buffer: []u8) -> bool {
 	p := &trace.parser
 	jp := init_json_parser()
-
-	trace.stamp_scale /= 1000
 
 	// skip until we hit the start of the traceEvents arr
 	last_read: i64 = 0
