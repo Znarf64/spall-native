@@ -4,8 +4,18 @@ import "core:fmt"
 import "core:os"
 import "core:bytes"
 
-DOS_MAGIC     := []u8{ 0x4d, 0x5a }
-PE32_MAGIC    := []u8{ 'P', 'E', 0, 0 }
+/*
+Handy References:
+- https://llvm.org/docs/PDB/MsfFile.html
+- https://github.com/dotnet/runtime/blob/main/docs/design/specs/PE-COFF.md
+*/
+
+DOS_MAGIC  := []u8{ 0x4d, 0x5a }
+PE32_MAGIC := []u8{ 'P', 'E', 0, 0 }
+PDB_MAGIC := []u8{
+	'M', 'i', 'c', 'r', 'o', 's', 'o', 'f', 't', ' ', 'C', '/', 'C', '+', '+',
+	' ', 'M', 'S', 'F', ' ', '7', '.', '0', '0', '\r', '\n', 0x1A, 0x44, 0x53, 0, 0, 0,
+}
 
 DEBUG_TYPE_CODEVIEW :: 2
 COFF_Header :: struct #packed {
@@ -92,6 +102,91 @@ COFF_Debug_Entry :: struct #packed {
 	age:         u32,
 }
 
+PDB_MSF_Header :: struct #packed {
+	magic:           [32]u8,
+	block_size:         u32,
+	free_block_map_idx: u32,
+	block_count:        u32,
+	directory_size:     u32,
+	reserved:           u32,
+}
+
+PDB_DBI_Header :: struct #packed {
+	signature:                  u32,
+	version:                    u32,
+	age:                        u32,
+	global_stream_idx:          u16,
+	build_idx:                  u16,
+	public_stream_idx:          u16,
+	pdb_dll_version:            u16,
+	sym_record_stream:          u16,
+	pdb_dll_rebuild:            u16,
+	mod_info_size:              u32,
+	section_contrib_size:       u32,
+	section_map_size:           u32,
+	source_info_size:           u32,
+	type_server_size:           u32,
+	mfc_type_server_idx:        u32,
+	optional_debug_header_size: u32,
+	ec_subsystem_size:          u32,
+	flags:                      u16,
+	machine:                    u16,
+	pad:                        u32,
+}
+
+PDB_Named_Stream_Map :: struct #packed {
+	length:              u32,
+}
+
+PDB_Section_Contrib_Entry :: struct #packed {
+	section:    u16,
+	padding:  [2]u8,
+	offset:     i32,
+	size:       i32,
+	flags:      u32,
+	module_idx: u16,
+	padding2: [2]u8,
+	data_crc:   u32,
+	reloc_crc:  u32,
+}
+
+PDB_ModuleInfo :: struct #packed {
+	reserved:             u32,
+	section_contrib:      PDB_Section_Contrib_Entry,
+	flags:                u16,
+	module_symbol_stream: u16,
+	symbol_size:          u32,
+	c11_size:             u32,
+	c13_size:             u32,
+	source_file_count:    u16,
+	padding:            [2]u8,
+	reserved2:            u32,
+	source_file_name_idx: u32,
+	file_path_name_idx:   u32,
+}
+
+PDB_Stream_Header :: struct #packed {
+	signature: u32,
+	version:   u32,
+	size:      u32,
+	guid:   [16]u8,
+}
+
+PDB_Proc32 :: struct #packed {
+	record_length:    u16,
+	record_type:      u16,
+	parent_offset:    u32,
+	block_end_offset: u32,
+	next_offset:      u32,
+	proc_length:      u32,
+	dbg_start_offset: u32,
+	dbg_end_offset:   u32,
+	type_id:          u32,
+	offset:           u32,
+	segment:          u16,
+	flags:             u8,
+}
+
 load_pe32 :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 	pdb_path := ""
 	{
@@ -147,7 +242,15 @@ load_pe32 :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 		}
 		defer delete(pdb_buffer)
 
+		msf_hdr := slice_to_type(pdb_buffer, PDB_MSF_Header) or_return
+		if !bytes.equal(msf_hdr.magic[:], PDB_MAGIC) {
+			return false
+		}
 
+		// TODO: support other block sizes? Is this even a thing?
+		if msf_hdr.block_size != 0x1000 {
+			return false
+		}
 	}
 
 	return false

@@ -58,6 +58,10 @@ i_round_up :: proc(x, align: $T) -> T {
 	return ((x + align - 1) / align) * align
 }
 
+div_ceil :: proc(x, y: $T) -> T {
+	return ((x + y) - 1) / y
+}
+
 f_round_down :: proc(x, align: $T) -> T {
 	return x - math.remainder(x, align)
 }
