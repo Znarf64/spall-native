@@ -3,6 +3,9 @@ package main
 import "core:fmt"
 import "core:os"
 import "core:bytes"
+import "core:slice"
+import "core:mem"
+import "core:math"
 
 /*
 Handy References:
@@ -251,7 +254,51 @@ load_pe32 :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 		if msf_hdr.block_size != 0x1000 {
 			return false
 		}
+
+		// PDB is complete nonsense. 
+		// At the bottom of the PDB header is an array of offsets. The array of offsets get you blocks, containing offsets.
+		// *THOSE* offsets get you the blocks containing the data to figure out what your data is.
+
+		directory_block_count := div_ceil(msf_hdr.block_count, msf_hdr.block_size)
+		msf_end_buffer := pdb_buffer[size_of(PDB_MSF_Header):]
+		directory_block_offsets := slice.reinterpret([]u32, msf_end_buffer[:directory_block_count * size_of(u32)])
+		directory_offsets := linearize_msf_stream(pdb_buffer, directory_block_offsets, msf_hdr.block_size, directory_block_count * size_of(u32))
+		directory_stream  := linearize_msf_stream(pdb_buffer, slice.reinterpret([]u32, directory_offsets), msf_hdr.block_size, msf_hdr.block_count)
+
+		stream_count := slice.reinterpret([]u32, directory_stream)[0]
+		stream_sizes := slice.reinterpret([]u32, directory_stream)[1:1+stream_count]
+		
+		fmt.printf("Number of streams in file: %d\n", stream_count)
+		for i := 0; i < len(stream_sizes); i += 1 {
+			fmt.printf("Stream %d -- blocks: %d ", i, div_ceil(stream_sizes[i], msf_hdr.block_size))
+			if i > 0 && i % 5 == 0 {
+				fmt.printf("\n")
+			}
+		}
+		fmt.printf("\n")
 	}
 
 	return false
+}
+
+linearize_msf_stream :: proc(data: []u8, indices: []u32, block_size: u32, stream_size: u32) -> []u8 {
+	block_count := div_ceil(stream_size, block_size)
+	linear_space := make([]u8, block_count * block_size)
+
+	full_block_count, leftovers := math.divmod(stream_size, block_size)
+	fmt.printf("got %d blocks!\n", full_block_count + (leftovers > 0 ? 1 : 0))
+
+	copy_offset : u32 = 0
+	for i : u32 = 0; i < full_block_count; i += 1 {
+		data_offset := indices[i] * block_size
+		mem.copy(raw_data(linear_space[copy_offset:]), raw_data(data[data_offset:]), int(block_size))
+		copy_offset += block_size
+	}
+
+	if leftovers > 0 {
+		data_offset := indices[block_count - 1] * block_size
+		mem.copy(raw_data(linear_space[copy_offset:]), raw_data(data[data_offset:]), int(leftovers))
+	}
+
+	return linear_space
 }
