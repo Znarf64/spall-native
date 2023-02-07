@@ -205,7 +205,7 @@ threaded_config_load :: proc(data: rawptr) {
 	post_loading = true
 }
 
-terminal_mode := true
+terminal_mode := false
 main :: proc() {
 
 	// If the user passed us a trace, save off the filename now
