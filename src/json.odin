@@ -276,6 +276,7 @@ skip_string :: proc(trace: ^Trace, chunk: []u8) -> (key: TmpKey, state: JSONStat
 
 the_skipper :: proc(trace: ^Trace, jp: ^JSONParser, chunk: []u8) -> JSONState {
 	p := &trace.parser
+	chunk_start := p.pos
 
 	// speed-skip until we have data we care about
 	if !jp.got_first_char {
@@ -286,15 +287,17 @@ the_skipper :: proc(trace: ^Trace, jp: ^JSONParser, chunk: []u8) -> JSONState {
 
 		ch := chunk[chunk_pos(p)]
 		if ch != '{' && ch != '[' {
-			post_error(trace, "Your JSON file is invalid! got %c, expected [ or {{", ch)
+			post_error(trace, "Your JSON file is invalid! got %c at pos %d, expected [ or {{", ch, real_pos(p))
 			return .InvalidFile
 		}
 
 		if ch == '[' {
+			jp.got_first_char = true
 			p.pos += 1
 			return .Finished
 		}
 	}
+	jp.got_first_char = true
 
 	// scan until we've got the token for the first object in the traceEvents array
 	for ; chunk_pos(p) < i64(len(chunk)); p.pos += 1 {
@@ -310,7 +313,9 @@ the_skipper :: proc(trace: ^Trace, jp: ^JSONParser, chunk: []u8) -> JSONState {
 				return .PartialRead
 			}
 
-			key_str := string(chunk[key.start:key.end])
+			kstart := key.start - chunk_start
+			kend   := key.end - chunk_start
+			key_str := string(chunk[kstart:kend])
 			if jp.skipper_objs == 1 && key_str == "traceEvents" {
 				ret := eat_spaces(trace, chunk)
 				if !ret {
