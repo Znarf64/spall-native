@@ -56,10 +56,10 @@ button :: proc(rects: ^[dynamic]DrawRect, in_rect: Rect, label_text, tooltip_tex
 	label_width := measure_text(label_text, .PSize, font)
 	label_height := get_text_height(.PSize, font)
 	draw_text(rects, label_text, 
-		Vec2{
-			in_rect.x + (in_rect.w / 2) - (label_width / 2), 
-			in_rect.y + (in_rect.h / 2) - (label_height / 2),
-		}, .PSize, font, toolbar_text_color)
+	Vec2{
+		in_rect.x + (in_rect.w / 2) - (label_width / 2), 
+		in_rect.y + (in_rect.h / 2) - (label_height / 2),
+	}, .PSize, font, toolbar_text_color)
 
 	if pt_in_rect(mouse_pos, in_rect) {
 		set_cursor("pointer")
@@ -349,44 +349,44 @@ draw_header :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState
 		color_text : string
 		tool_text : string
 		switch colormode {
-		case .Auto:
+			case .Auto:
 			tool_text = "switch to dark colors"
 			color_text = "\uf042"
-		case .Dark:
+			case .Dark:
 			tool_text = "switch to light colors"
 			color_text = "\uf10c"
-		case .Light:
+			case .Light:
 			tool_text = "switch to auto colors"
 			color_text = "\uf111"
 		}
 
 		if button(rects, Rect{
-							ui_state.width - edge_pad - button_width, 
-							(header_rect.h / 2) - (button_height / 2), 
-							button_width,
-							button_height,
-						 }, color_text, tool_text, .IconFont, 0, ui_state.width) {
+			ui_state.width - edge_pad - button_width, 
+			(header_rect.h / 2) - (button_height / 2), 
+			button_width,
+			button_height,
+		}, color_text, tool_text, .IconFont, 0, ui_state.width) {
 			new_colormode: ColorMode
 
 			// rotate between auto, dark, and light
 			switch colormode {
-			case .Auto:
+				case .Auto:
 				new_colormode = .Dark
-			case .Dark:
+				case .Dark:
 				new_colormode = .Light
-			case .Light:
+				case .Light:
 				new_colormode = .Auto
 			}
 
 			switch new_colormode {
-			case .Auto:
+				case .Auto:
 				is_dark := get_system_color()
 				set_color_mode(true, is_dark)
 				set_session_storage("colormode", "auto")
-			case .Dark:
+				case .Dark:
 				set_color_mode(false, true)
 				set_session_storage("colormode", "dark")
-			case .Light:
+				case .Light:
 				set_color_mode(false, false)
 				set_session_storage("colormode", "light")
 			}
@@ -663,7 +663,7 @@ draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRe
 						if did_multiselect {
 							if found_rid == -1 { should_fade = true } 
 							else {
-								range := trace.selected_ranges[found_rid]	
+								range := trace.selected_ranges[found_rid]   
 								if !range_in_range(cur_node.event_start_idx, cur_node.event_start_idx+uint(cur_node.event_arr_len), uint(range.start), uint(range.end)) {
 									should_fade = true
 								}
@@ -729,7 +729,7 @@ draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRe
 							if did_multiselect {
 								if found_rid == -1 { should_fade = true } 
 								else {
-									range := trace.selected_ranges[found_rid]	
+									range := trace.selected_ranges[found_rid]   
 									if !val_in_range(e_idx, range.start, range.end - 1) { should_fade = true }
 								}
 							}
@@ -744,7 +744,7 @@ draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRe
 							}
 
 							if int(selected_event.pid) == p_idx && int(selected_event.tid) == t_idx &&
-							   int(selected_event.did) == d_idx && int(selected_event.eid) == e_idx {
+							int(selected_event.did) == d_idx && int(selected_event.eid) == e_idx {
 								rect_color.x += 30
 								rect_color.y += 30
 								rect_color.z += 30
@@ -1004,7 +1004,7 @@ draw_minimap :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIStat
 						if did_multiselect {
 							if found_rid == -1 { should_fade = true } 
 							else {
-								range := trace.selected_ranges[found_rid]	
+								range := trace.selected_ranges[found_rid]   
 								if !range_in_range(cur_node.event_start_idx, cur_node.event_start_idx+uint(cur_node.event_arr_len), uint(range.start), uint(range.end)) {
 									should_fade = true
 								}
@@ -1055,7 +1055,7 @@ draw_minimap :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIStat
 							if did_multiselect {
 								if found_rid == -1 { should_fade = true } 
 								else {
-									range := trace.selected_ranges[found_rid]	
+									range := trace.selected_ranges[found_rid]   
 									if !val_in_range(e_idx, range.start, range.end - 1) { should_fade = true }
 								}
 							}
@@ -1112,7 +1112,7 @@ draw_topbars :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, start_time, end_t
 	draw_rect(rects, Rect{0, header_rect.h, ui_state.side_pad, ui_state.height}, bg_color) // left
 
 	draw_line(rects, Vec2{ui_state.side_pad, full_flamegraph_rect.y + flamegraph_toptext_height}, 
-					 Vec2{ui_state.width - minimap_rect.w, full_flamegraph_rect.y + flamegraph_toptext_height}, 1, line_color)
+	Vec2{ui_state.width - minimap_rect.w, full_flamegraph_rect.y + flamegraph_toptext_height}, 1, line_color)
 
 	highlight_start_x := rescale(f64(start_time), 0, f64(trace_duration), 0, full_flamegraph_rect.w)
 	highlight_end_x   := rescale(f64(end_time), 0, f64(trace_duration), 0, full_flamegraph_rect.w)
@@ -1161,29 +1161,29 @@ draw_topbars :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, start_time, end_t
 				text_width := measure_text(time_str, .PSize, .DefaultFont)
 
 				draw_text(rects, time_str, 
-					Vec2{
-						ui_state.side_pad + x_off - (text_width / 2),
-						header_rect.h + (global_timebar_rect.h / 2) - (em / 2),
-					}, .PSize, .DefaultFont, text_color)
+				Vec2{
+					ui_state.side_pad + x_off - (text_width / 2),
+					header_rect.h + (global_timebar_rect.h / 2) - (em / 2),
+				}, .PSize, .DefaultFont, text_color)
 				line_start_y = header_rect.h + (global_timebar_rect.h / 2) - (em / 2) + p_height
 			} else {
 				line_start_y = header_rect.h + (global_timebar_rect.h / 2) - (em / 2) + p_height + (p_height / 6)
 			}
 
 			draw_line(rects,
-				Vec2{ui_state.side_pad + x_off, line_start_y}, 
-				Vec2{ui_state.side_pad + x_off, header_rect.h + global_timebar_rect.h - 2}, 2, division_color)
+			Vec2{ui_state.side_pad + x_off, line_start_y}, 
+			Vec2{ui_state.side_pad + x_off, header_rect.h + global_timebar_rect.h - 2}, 2, division_color)
 		}
 
 		draw_line(rects, 
-			Vec2{ui_state.side_pad + highlight_start_x, header_rect.h + (global_timebar_rect.h / 2) - (em / 2) + p_height},
-			Vec2{ui_state.side_pad + highlight_start_x, header_rect.h + global_timebar_rect.h + global_activity_rect.h}, 2, xbar_color)
+		Vec2{ui_state.side_pad + highlight_start_x, header_rect.h + (global_timebar_rect.h / 2) - (em / 2) + p_height},
+		Vec2{ui_state.side_pad + highlight_start_x, header_rect.h + global_timebar_rect.h + global_activity_rect.h}, 2, xbar_color)
 		draw_line(rects, 
-			Vec2{ui_state.side_pad + highlight_end_x, header_rect.h + (global_timebar_rect.h / 2) - (em / 2) + p_height}, 
-			Vec2{ui_state.side_pad + highlight_end_x, header_rect.h + global_timebar_rect.h + global_activity_rect.h}, 2, xbar_color)
+		Vec2{ui_state.side_pad + highlight_end_x, header_rect.h + (global_timebar_rect.h / 2) - (em / 2) + p_height}, 
+		Vec2{ui_state.side_pad + highlight_end_x, header_rect.h + global_timebar_rect.h + global_activity_rect.h}, 2, xbar_color)
 		draw_line(rects, 
-			Vec2{0, header_rect.h + global_timebar_rect.h + global_activity_rect.h}, 
-			Vec2{ui_state.width, header_rect.h + global_timebar_rect.h + global_activity_rect.h}, 1, line_color)
+		Vec2{0, header_rect.h + global_timebar_rect.h + global_activity_rect.h}, 
+		Vec2{ui_state.width, header_rect.h + global_timebar_rect.h + global_activity_rect.h}, 1, line_color)
 	}
 }
 
@@ -1221,11 +1221,11 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, info_line_count: in
 		draw_text(rects, fmt.tprintf("  duration:%s", time_fmt(f64(bound_duration(&event, thread.max_time)))), Vec2{x_subpad, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 		draw_text(rects, fmt.tprintf(" self time:%s", time_fmt(f64(event.self_time))), Vec2{x_subpad, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 
-	// If we've got stats cooking already
+		// If we've got stats cooking already
 	} else if stats_state == .Pass1 || stats_state == .Pass2 {
 		y := info_pane_rect.y + ui_state.top_line_gap
 		center_x := ui_state.width / 2
-		
+
 		total_count := 0
 		cur_count := 0
 		for range, r_idx in trace.selected_ranges {
@@ -1261,7 +1261,7 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, info_line_count: in
 			draw_text(rects, str, Vec2{center_x - (str_width / 2), next_line(&cur_y, em)}, .PSize, .DefaultFont, text_color)
 		}
 
-	// If stats are ready to display
+		// If stats are ready to display
 	} else if stats_state == .Finished && did_multiselect {
 		y := info_pane_rect.y + ui_state.top_line_gap
 
@@ -1509,21 +1509,24 @@ process_multiselect :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, pan_delta:
 		c_x := min(clicked_pos.x, inner_flamegraph_rect.x + inner_flamegraph_rect.w)
 		c_x = max(c_x, inner_flamegraph_rect.x)
 
-		c_y := min(clicked_pos.y, inner_flamegraph_rect.y + inner_flamegraph_rect.h)
-		c_y = max(c_y, inner_flamegraph_rect.y)
-
 		m_x := min(c_x + delta.x, inner_flamegraph_rect.x + inner_flamegraph_rect.w)
 		m_x = max(m_x, inner_flamegraph_rect.x)
-		m_y := min(c_y + delta.y, inner_flamegraph_rect.y + inner_flamegraph_rect.h)
-		m_y = max(m_y, inner_flamegraph_rect.y)
 
 		d_x := m_x - c_x
-		d_y := m_y - c_y
 
 		// draw multiselect box
-		selected_rect := Rect{c_x, c_y, d_x, d_y}
+		selected_rect := Rect{c_x, inner_flamegraph_rect.y, d_x, inner_flamegraph_rect.h}
 		multiselect_color := toolbar_color
-		draw_rect_inline(rects, selected_rect, 1, multiselect_color)
+		{
+			x1 := selected_rect.x + 1
+			y1 := selected_rect.y + 1
+			x2 := selected_rect.x + selected_rect.w - 1
+			y2 := selected_rect.y + selected_rect.h - 1
+
+			draw_line(rects, Vec2{x1, y1}, Vec2{x1, y2}, 1, multiselect_color)
+			draw_line(rects, Vec2{x2, y1}, Vec2{x2, y2}, 1, multiselect_color)
+		}
+
 		multiselect_color.w = 20
 		draw_rect(rects, selected_rect, multiselect_color)
 
@@ -1533,9 +1536,8 @@ process_multiselect :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, pan_delta:
 		x2 := max(selected_rect.x, selected_rect.x + selected_rect.w)
 		flopped_rect.w = x2 - flopped_rect.x
 
-		flopped_rect.y = min(selected_rect.y, selected_rect.y + selected_rect.h)
-		y2 := max(selected_rect.y, selected_rect.y + selected_rect.h)
-		flopped_rect.h = y2 - flopped_rect.y
+		flopped_rect.y = selected_rect.y
+		flopped_rect.h = selected_rect.h
 
 		selected_start_time := to_world_x(cam, flopped_rect.x - full_flamegraph_rect.x)
 		selected_end_time   := to_world_x(cam, flopped_rect.x - full_flamegraph_rect.x + flopped_rect.w)
@@ -1544,233 +1546,206 @@ process_multiselect :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, pan_delta:
 		width_text := measure_fmt(selected_end_time - selected_start_time)
 		width_text_width := measure_text(width_text, .PSize, .MonoFont) + em
 
-		text_bg_rect := flopped_rect
+		text_bg_rect  := flopped_rect
 		text_bg_rect.x = text_bg_rect.x + (text_bg_rect.w / 2) - (width_text_width / 2)
-		text_bg_rect.y = text_bg_rect.y - (p_height * 2)
 		text_bg_rect.w = width_text_width
+		text_bg_rect.y = flopped_rect.y
 		text_bg_rect.h = (p_height * 2)
 
-		if flopped_rect.w > text_bg_rect.w {
-			multiselect_color.w = 180
-			draw_rect(rects, text_bg_rect, multiselect_color)
-			draw_text(rects,
-				width_text, 
-				Vec2{
-					text_bg_rect.x + (em / 2), 
-					text_bg_rect.y + (p_height / 2),
-				}, 
-				.PSize,
-				.MonoFont,
-				BVec4{255, 255, 255, 255},
-			)
-		}
+		text_bg_rect.x = max(text_bg_rect.x, inner_flamegraph_rect.x)
 
-		// push it into screen-space
-		flopped_rect.x -= full_flamegraph_rect.x
+		multiselect_color.w = 180
+		draw_rect(rects, text_bg_rect, multiselect_color)
+		draw_text(rects,
+		width_text, 
+		Vec2{
+			text_bg_rect.x + (em / 2), 
+			text_bg_rect.y + (p_height / 2),
+		}, 
+		.PSize,
+		.MonoFont,
+		BVec4{255, 255, 255, 255},
+	)
 
-		sm_clear(&trace.stats)
-		resize(&trace.selected_ranges, 0)
+	// push it into screen-space
+	flopped_rect.x -= full_flamegraph_rect.x
 
-		// build out ranges
-		cur_y := padded_flamegraph_rect.y - cam.pan.y
-		proc_loop2: for proc_v, p_idx in trace.processes {
-			h1_size : f64 = 0
-			if len(trace.processes) > 1 {
-				h1_size = h1_height + (h1_height / 2)
-				cur_y += h1_size
-			}
+	sm_clear(&trace.stats)
+	resize(&trace.selected_ranges, 0)
 
-			for thread, t_idx in proc_v.threads {
-				h2_size := h2_height + (h2_height / 2)
-				cur_y += h2_size
-				if cur_y > info_pane_rect.y {
-					break proc_loop2
+	// build out ranges
+	for proc_v, p_idx in trace.processes {
+		for thread, t_idx in proc_v.threads {
+			for depth, d_idx in thread.depths {
+				start_idx := find_idx(trace, depth.events[:], i64(selected_start_time))
+				end_idx := find_idx(trace, depth.events[:], i64(selected_end_time))
+				if start_idx == -1 {
+					start_idx = 0
+				}
+				if end_idx == -1 {
+					end_idx = len(depth.events) - 1
+				}
+				scan_arr := depth.events[start_idx:end_idx+1]
+
+				real_start := -1
+				fwd_scan_loop: for i := 0; i < len(scan_arr); i += 1 {
+					ev := scan_arr[i]
+					x := f64(ev.timestamp - trace.total_min_time)
+
+					duration := f64(bound_duration(&ev, thread.max_time))
+					w := duration * cam.current_scale
+
+					r_x1 := (x * cam.current_scale) + cam.pan.x
+					r_x2 := r_x1 + w
+
+					fl_x1 := flopped_rect.x
+					fl_x2 := flopped_rect.x + flopped_rect.w
+
+					if !range_in_range(r_x1, r_x2, fl_x1, fl_x2) {
+						continue fwd_scan_loop
+					}
+
+					real_start = start_idx + i
+					break fwd_scan_loop
 				}
 
-				thread_advance := ((f64(len(thread.depths)) * ui_state.rect_height) + thread_gap)
-				if cur_y + thread_advance < 0 {
-					cur_y += thread_advance
-					continue
+				real_end := -1
+				rev_scan_loop: for i := len(scan_arr) - 1; i >= 0; i -= 1 {
+					ev := scan_arr[i]
+					x := f64(ev.timestamp - trace.total_min_time)
+
+					duration := f64(bound_duration(&ev, thread.max_time))
+					w := duration * cam.current_scale
+
+					r_x1 := (x * cam.current_scale) + cam.pan.x
+					r_x2 := r_x1 + w
+
+					fl_x1 := flopped_rect.x
+					fl_x2 := flopped_rect.x + flopped_rect.w
+
+					if !range_in_range(r_x1, r_x2, fl_x1, fl_x2) {
+						continue rev_scan_loop
+					}
+
+					real_end = start_idx + i + 1
+					break rev_scan_loop
 				}
 
-				for depth, d_idx in thread.depths {
-					y := ui_state.rect_height * f64(d_idx)
-					h := ui_state.rect_height
-
-					dy := cur_y + y
-					dy2 := cur_y + y + h
-					if dy > (flopped_rect.y + flopped_rect.h) || dy2 < flopped_rect.y {
-						continue
-					}
-
-					start_idx := find_idx(trace, depth.events[:], i64(selected_start_time))
-					end_idx := find_idx(trace, depth.events[:], i64(selected_end_time))
-					if start_idx == -1 {
-						start_idx = 0
-					}
-					if end_idx == -1 {
-						end_idx = len(depth.events) - 1
-					}
-					scan_arr := depth.events[start_idx:end_idx+1]
-
-					real_start := -1
-					fwd_scan_loop: for i := 0; i < len(scan_arr); i += 1 {
-						ev := scan_arr[i]
-						x := f64(ev.timestamp - trace.total_min_time)
-
-						duration := f64(bound_duration(&ev, thread.max_time))
-						w := duration * cam.current_scale
-
-						r := Rect{x, y, w, h}
-						r_x := (r.x * cam.current_scale) + cam.pan.x
-						r_y := cur_y + r.y
-						dr := Rect{r_x, r_y, r.w, r.h}
-
-						if !rect_in_rect(flopped_rect, dr) {
-							continue fwd_scan_loop
-						}
-
-						real_start = start_idx + i
-						break fwd_scan_loop
-					}
-
-					real_end := -1
-					rev_scan_loop: for i := len(scan_arr) - 1; i >= 0; i -= 1 {
-						ev := scan_arr[i]
-						x := f64(ev.timestamp - trace.total_min_time)
-
-						duration := f64(bound_duration(&ev, thread.max_time))
-						w := duration * cam.current_scale
-
-						r := Rect{x, y, w, h}
-						r_x := (r.x * cam.current_scale) + cam.pan.x
-						r_y := cur_y + r.y
-						dr := Rect{r_x, r_y, r.w, r.h}
-
-						if !rect_in_rect(flopped_rect, dr) {
-							continue rev_scan_loop
-						}
-
-						real_end = start_idx + i + 1
-						break rev_scan_loop
-					}
-
-					if real_start != -1 && real_end != -1 {
-						append(&trace.selected_ranges, Range{p_idx, t_idx, d_idx, real_start, real_end})
-					}
+				if real_start != -1 && real_end != -1 {
+					append(&trace.selected_ranges, Range{p_idx, t_idx, d_idx, real_start, real_end})
 				}
-				cur_y += thread_advance
 			}
 		}
 	}
+}
 
-	if (stats_state == .Pass1 || stats_state == .Pass2) && did_multiselect {
-		event_count := 0
-		iter_max := just_started ? INITIAL_ITER : FULL_ITER
+if (stats_state == .Pass1 || stats_state == .Pass2) && did_multiselect {
+	event_count := 0
+	iter_max := just_started ? INITIAL_ITER : FULL_ITER
 
-		broke_early := false
-		if stats_state == .Pass1 {
-			pass1_range_loop: for range, r_idx in trace.selected_ranges {
-				start_idx := range.start
-				if cur_stat_offset.range_idx > r_idx {
-					continue
-				} else if cur_stat_offset.range_idx == r_idx {
-					start_idx = max(start_idx, cur_stat_offset.event_idx)
-				}
-
-				thread := trace.processes[range.pid].threads[range.tid]
-				events := thread.depths[range.did].events[start_idx:range.end]
-
-				for ev, e_idx in &events {
-					if event_count > iter_max {
-						cur_stat_offset = StatOffset{r_idx, start_idx + e_idx}
-						broke_early = true
-						break pass1_range_loop
-					}
-
-					duration := bound_duration(&ev, thread.max_time)
-					name := in_getstr(&trace.string_block, ev.name)
-					s, ok := sm_get(&trace.stats, ev.name)
-					if !ok {
-						s = sm_insert(&trace.stats, ev.name, Stats{min_time = max(i64)})
-					}
-
-					s.count += 1
-					s.total_time += duration
-					s.self_time += ev.self_time
-					s.min_time = min(s.min_time, duration)
-					s.max_time = max(s.max_time, duration)
-					total_tracked_time += duration
-
-					event_count += 1
-				}
-
+	broke_early := false
+	if stats_state == .Pass1 {
+		pass1_range_loop: for range, r_idx in trace.selected_ranges {
+			start_idx := range.start
+			if cur_stat_offset.range_idx > r_idx {
+				continue
+			} else if cur_stat_offset.range_idx == r_idx {
+				start_idx = max(start_idx, cur_stat_offset.event_idx)
 			}
 
-			if !broke_early {
-				stats_state = .Pass2
-				cur_stat_offset = StatOffset{}
+			thread := trace.processes[range.pid].threads[range.tid]
+			events := thread.depths[range.did].events[start_idx:range.end]
+
+			for ev, e_idx in &events {
+				if event_count > iter_max {
+					cur_stat_offset = StatOffset{r_idx, start_idx + e_idx}
+					broke_early = true
+					break pass1_range_loop
+				}
+
+				duration := bound_duration(&ev, thread.max_time)
+				name := in_getstr(&trace.string_block, ev.name)
+				s, ok := sm_get(&trace.stats, ev.name)
+				if !ok {
+					s = sm_insert(&trace.stats, ev.name, Stats{min_time = max(i64)})
+				}
+
+				s.count += 1
+				s.total_time += duration
+				s.self_time += ev.self_time
+				s.min_time = min(s.min_time, duration)
+				s.max_time = max(s.max_time, duration)
+				total_tracked_time += duration
+
+				event_count += 1
 			}
+
 		}
 
-		if stats_state == .Pass2 {
-			pass2_range_loop: for range, r_idx in trace.selected_ranges {
-				start_idx := range.start
-				if cur_stat_offset.range_idx > r_idx {
-					continue
-				} else if cur_stat_offset.range_idx == r_idx {
-					start_idx = max(start_idx, cur_stat_offset.event_idx)
-				}
-
-				thread := trace.processes[range.pid].threads[range.tid]
-				events := thread.depths[range.did].events[start_idx:range.end]
-
-				for ev, e_idx in &events {
-					if event_count > iter_max {
-						cur_stat_offset = StatOffset{r_idx, start_idx + e_idx}
-						broke_early = true
-						break pass2_range_loop
-					}
-
-					duration := bound_duration(&ev, thread.max_time)
-					name := in_getstr(&trace.string_block, ev.name)
-					s, ok := sm_get(&trace.stats, ev.name)
-
-					if (s.max_time - s.min_time <= 0) {
-						s.hist[50] += 1
-					} else {
-						t := (duration - s.min_time) / (s.max_time - s.min_time)
-						t = min(1, max(t, 0))
-						t *= 99
-						s.hist[u32(t)] += 1
-					}
-
-					event_count += 1
-				}
-			}
-
-			if !broke_early {
-				for i := 0; i < len(trace.stats.entries); i += 1 {
-					stat := &trace.stats.entries[i].val
-					stat.avg_time = f64(stat.total_time) / f64(stat.count)
-				}
-
-				self_sort :: proc(a, b: StatEntry) -> bool {
-					return a.val.self_time > b.val.self_time
-				}
-				sm_sort(&trace.stats, self_sort)
-				stats_state = .Finished
-			}
+		if !broke_early {
+			stats_state = .Pass2
+			cur_stat_offset = StatOffset{}
 		}
 	}
 
-	return
+	if stats_state == .Pass2 {
+		pass2_range_loop: for range, r_idx in trace.selected_ranges {
+			start_idx := range.start
+			if cur_stat_offset.range_idx > r_idx {
+				continue
+			} else if cur_stat_offset.range_idx == r_idx {
+				start_idx = max(start_idx, cur_stat_offset.event_idx)
+			}
+
+			thread := trace.processes[range.pid].threads[range.tid]
+			events := thread.depths[range.did].events[start_idx:range.end]
+
+			for ev, e_idx in &events {
+				if event_count > iter_max {
+					cur_stat_offset = StatOffset{r_idx, start_idx + e_idx}
+					broke_early = true
+					break pass2_range_loop
+				}
+
+				duration := bound_duration(&ev, thread.max_time)
+				name := in_getstr(&trace.string_block, ev.name)
+				s, ok := sm_get(&trace.stats, ev.name)
+
+				if (s.max_time - s.min_time <= 0) {
+					s.hist[50] += 1
+				} else {
+					t := (duration - s.min_time) / (s.max_time - s.min_time)
+					t = min(1, max(t, 0))
+					t *= 99
+					s.hist[u32(t)] += 1
+				}
+
+				event_count += 1
+			}
+		}
+
+		if !broke_early {
+			for i := 0; i < len(trace.stats.entries); i += 1 {
+				stat := &trace.stats.entries[i].val
+				stat.avg_time = f64(stat.total_time) / f64(stat.count)
+			}
+
+			self_sort :: proc(a, b: StatEntry) -> bool {
+				return a.val.self_time > b.val.self_time
+			}
+			sm_sort(&trace.stats, self_sort)
+			stats_state = .Finished
+		}
+	}
+}
+
+return
 }
 
 sort_stats :: proc(trace: ^Trace) {
 	less: proc(a, b: StatEntry) -> bool
 	switch stat_sort_type {
-	case .SelfTime:
+		case .SelfTime:
 		less = proc(a, b: StatEntry) -> bool {
 			if stat_sort_descending {
 				return a.val.self_time > b.val.self_time
@@ -1778,7 +1753,7 @@ sort_stats :: proc(trace: ^Trace) {
 				return a.val.self_time < b.val.self_time
 			}
 		}
-	case .TotalTime:
+		case .TotalTime:
 		less = proc(a, b: StatEntry) -> bool {
 			if stat_sort_descending {
 				return a.val.total_time > b.val.total_time
@@ -1786,7 +1761,7 @@ sort_stats :: proc(trace: ^Trace) {
 				return a.val.total_time < b.val.total_time
 			}
 		}
-	case .MinTime:
+		case .MinTime:
 		less = proc(a, b: StatEntry) -> bool {
 			if stat_sort_descending {
 				return a.val.min_time > b.val.min_time
@@ -1794,7 +1769,7 @@ sort_stats :: proc(trace: ^Trace) {
 				return a.val.min_time < b.val.min_time
 			}
 		}
-	case .AvgTime:
+		case .AvgTime:
 		less = proc(a, b: StatEntry) -> bool {
 			if stat_sort_descending {
 				return a.val.avg_time > b.val.avg_time
@@ -1802,7 +1777,7 @@ sort_stats :: proc(trace: ^Trace) {
 				return a.val.avg_time < b.val.avg_time
 			}
 		}
-	case .MaxTime:
+		case .MaxTime:
 		less = proc(a, b: StatEntry) -> bool {
 			if stat_sort_descending {
 				return a.val.max_time > b.val.max_time
@@ -1810,7 +1785,7 @@ sort_stats :: proc(trace: ^Trace) {
 				return a.val.max_time < b.val.max_time
 			}
 		}
-	case .Count:
+		case .Count:
 		less = proc(a, b: StatEntry) -> bool {
 			if stat_sort_descending {
 				return a.val.count > b.val.count
