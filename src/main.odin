@@ -35,8 +35,6 @@ last_mouse_pos := Vec2{}
 mouse_pos      := Vec2{}
 clicked_pos    := Vec2{}
 scroll_val_y: f64 = 0
-info_pane_scroll: f64 = 0
-info_pane_scroll_vel: f64 = 0
 velocity_multiplier: f64 = 0
 
 cam := Camera{Vec2{0, 0}, Vec2{0, 0}, 0, 1, 1}
@@ -64,7 +62,6 @@ stat_sort_descending := true
 resort_stats := false
 cur_stat_offset := StatOffset{}
 total_tracked_time : i64 = 0
-stats_options_open := false
 
 // drawing state
 colormode      := ColorMode.Dark
@@ -610,11 +607,14 @@ main :: proc() {
 		rect_height     := em + (0.75 * em)
 		top_line_gap    := (em / 1.5)
 
-
 		topbars_height    := header_height + timebar_height + activity_height
 		minigraph_width   := 15 * em
 		flamegraph_width  := width - (spall_x_pad + minigraph_width)
 		flamegraph_height := height - topbars_height - ui_state.info_pane_height
+
+		tab_select_height := 2 * em
+		filter_pane_width := ui_state.filters_open ? (15 * em) : 0
+		stats_pane_x := filter_pane_width
 
 		ui_state.height = height
 		ui_state.width  = width
@@ -630,7 +630,15 @@ main :: proc() {
 		ui_state.global_activity_rect    = Rect{spall_x_pad, header_height + timebar_height, flamegraph_width, activity_height}
 		ui_state.local_timebar_rect      = Rect{spall_x_pad, header_height + timebar_height + activity_height, flamegraph_width, timebar_height}
 		ui_state.minimap_rect            = Rect{width - minigraph_width, topbars_height, minigraph_width, flamegraph_height}
+
 		ui_state.info_pane_rect          = Rect{0, height - ui_state.info_pane_height, width, ui_state.info_pane_height}
+		ui_state.tab_rect                = Rect{0, ui_state.info_pane_rect.y, ui_state.width, tab_select_height}
+
+		pane_start_y := ui_state.tab_rect.y + ui_state.tab_rect.h
+
+		info_subpane_height := ui_state.info_pane_height - tab_select_height
+		ui_state.filter_pane_rect        = Rect{0, pane_start_y, filter_pane_width, info_subpane_height}
+		ui_state.stats_pane_rect         = Rect{stats_pane_x, pane_start_y, width - stats_pane_x, info_subpane_height}
 
 		ui_state.full_flamegraph_rect    = Rect{spall_x_pad, topbars_height, flamegraph_width, flamegraph_height}
 
@@ -707,11 +715,12 @@ main :: proc() {
 		flush_rects(&rects)
 
 		// save me my battery, plz
-		if should_sleep(&cam, info_pane_scroll_vel, &ui_state) {
+		if should_sleep(&cam, &ui_state) {
 			cam.pan.x = cam.target_pan_x
 			cam.vel.y = 0
 			cam.current_scale = cam.target_scale
-			info_pane_scroll_vel = 0
+			ui_state.stats_pane_scroll_vel = 0
+			ui_state.filter_pane_scroll_vel = 0
 
 			awake = false
 		} else {
@@ -724,7 +733,7 @@ main :: proc() {
 	}
 }
 
-should_sleep :: proc(cam: ^Camera, info_pane_scroll_vel: f64, ui_state: ^UIState) -> bool {
+should_sleep :: proc(cam: ^Camera, ui_state: ^UIState) -> bool {
 	PAN_X_EPSILON :: 0.01
 	PAN_Y_EPSILON :: 1.0
 	SCALE_EPSILON :: 0.01
@@ -733,7 +742,7 @@ should_sleep :: proc(cam: ^Camera, info_pane_scroll_vel: f64, ui_state: ^UIState
 	panning_x := math.abs(cam.pan.x - cam.target_pan_x) > PAN_X_EPSILON
 	panning_y := math.abs(cam.vel.y - 0) > PAN_Y_EPSILON
 	scaling   := math.abs((cam.current_scale - cam.target_scale) / cam.target_scale) > SCALE_EPSILON
-	scrolling := math.abs(info_pane_scroll_vel) > SCROLL_EPSILON
+	scrolling := (math.abs(ui_state.filter_pane_scroll_vel) > SCROLL_EPSILON) || (math.abs(ui_state.stats_pane_scroll_vel) > SCROLL_EPSILON)
 
 	return (!ui_state.render_one_more && !panning_x && !panning_y && !scaling && !scrolling)
 }

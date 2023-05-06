@@ -323,7 +323,7 @@ draw_header :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState
 			trace.stats_start_time = f64(trace.total_min_time)
 			trace.stats_end_time = f64(trace.total_max_time)
 			ui_state.multiselecting = true
-			build_selected_ranges(trace)
+			build_selected_ranges(trace, ui_state)
 		}
 		cursor_x += button_width + button_pad
 
@@ -1132,31 +1132,31 @@ draw_topbars :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, start_time, end_t
 INITIAL_ITER :: 500_000
 FULL_ITER    :: 2_000_000
 draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState) {
-	full_flamegraph_rect := ui_state.full_flamegraph_rect
+	full_flamegraph_rect  := ui_state.full_flamegraph_rect
 	inner_flamegraph_rect := ui_state.inner_flamegraph_rect
-	info_pane_rect := ui_state.info_pane_rect
+
+	info_pane_rect        := ui_state.info_pane_rect
+	tab_rect              := ui_state.tab_rect
+	stats_pane_rect       := ui_state.stats_pane_rect
+	filter_pane_rect      := ui_state.filter_pane_rect
 
 	// Render info pane back-covers
 	draw_line(rects, Vec2{0, info_pane_rect.y}, Vec2{ui_state.width, info_pane_rect.y}, 1, line_color)
 	draw_rect(rects, info_pane_rect, bg_color) // bottom
 
-	tab_select_height := 2 * em
-	tab_rect := Rect{0, info_pane_rect.y, ui_state.width, tab_select_height}
 
-	pane_start_y := info_pane_rect.y + tab_select_height
-	pane_gapped_start_y := pane_start_y + ui_state.top_line_gap
-
+	pane_start_y := tab_rect.y + tab_rect.h
 	draw_rect(rects, tab_rect, tabbar_color)
 	draw_line(rects, Vec2{0, pane_start_y}, Vec2{ui_state.width, pane_start_y}, 1, line_color)
 
 	// draw pane grip
 	handle_text := "\uf00a"
-	handle_y := info_pane_rect.y + ((tab_select_height / 2) - (h2_height / 2))
+	handle_y := info_pane_rect.y + ((tab_rect.h / 2) - (h2_height / 2))
 	handle_width := measure_text(handle_text, .H2Size, .IconFont)
 
 	handle_pad := (em / 2)
 	tab_bar_x := (2 * handle_pad) + handle_width
-	tab_handle_rect := Rect{0, info_pane_rect.y, tab_bar_x, tab_select_height}
+	tab_handle_rect := Rect{0, info_pane_rect.y, tab_bar_x, tab_rect.h}
 	draw_rect(rects, tab_handle_rect, grip_color)
 	draw_text(rects, handle_text, Vec2{handle_pad, handle_y}, .H2Size, .IconFont, toolbar_text_color)
 
@@ -1169,38 +1169,55 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 	}
 	if is_mouse_down && ui_state.resizing_pane {
 		pos_y := max((ui_state.header_rect.y + ui_state.header_rect.h), mouse_pos.y)
-		ui_state.info_pane_height = max(ui_state.height - pos_y, tab_select_height)
+		ui_state.info_pane_height = max(ui_state.height - pos_y, tab_rect.h)
 	}
 	if mouse_up_now && ui_state.resizing_pane {
 		ui_state.resizing_pane = false
 	}
 
 	tab_bar_x += handle_pad
-	hamburger_text := "\uf142"
-	hamburger_width := measure_text(hamburger_text, .H2Size, .IconFont)
-	draw_text(rects, hamburger_text, Vec2{tab_bar_x, handle_y}, .H2Size, .IconFont, toolbar_text_color)
-	tab_hamburger_rect := Rect{tab_bar_x, handle_y, hamburger_width, h2_height}
-	if pt_in_rect(mouse_pos, tab_hamburger_rect) {
+	filter_text := ui_state.filters_open ? "\uf150" : "\uf152"
+	filter_width := measure_text(filter_text, .H2Size, .IconFont)
+	draw_text(rects, filter_text, Vec2{tab_bar_x, handle_y}, .H2Size, .IconFont, toolbar_text_color)
+	tab_filter_rect := Rect{tab_bar_x, handle_y, filter_width, h2_height}
+	if pt_in_rect(mouse_pos, tab_filter_rect) {
 		set_cursor("pointer")
 	}
-	if clicked && pt_in_rect(clicked_pos, tab_hamburger_rect) {
-		ui_state.stats_options_open = !ui_state.stats_options_open
+	if clicked && pt_in_rect(clicked_pos, tab_filter_rect) {
+		ui_state.filters_open = !ui_state.filters_open
+		ui_state.render_one_more = true
 	}
 
-	options_pane_height := 15 * em
-	options_pane_width  := 20 * em
-	stats_options_y := info_pane_rect.y - options_pane_height
-	ui_state.stats_options_rect = Rect{tab_bar_x, stats_options_y, options_pane_width, options_pane_height}
-	if ui_state.stats_options_open {
-		draw_rect(rects, ui_state.stats_options_rect, tabbar_color)
-		if pt_in_rect(mouse_pos, ui_state.stats_options_rect) {
+	// hotpatch position after the update, so we don't have a frame with stale position state
+	if ui_state.filters_open {
+		stats_pane_rect.x = filter_pane_rect.x + filter_pane_rect.w
+	} else {
+		stats_pane_rect.x = info_pane_rect.x
+	}
+
+	if ui_state.filters_open {
+		draw_rect(rects, ui_state.filter_pane_rect, tabbar_color)
+		if pt_in_rect(mouse_pos, ui_state.filter_pane_rect) {
 			reset_cursor()
 			is_hovering = false
 			rendered_rect_tooltip = false
 		}
 
-		y_offset := stats_options_y + (em / 2)
-		x_offset := tab_bar_x + (em / 2)
+		y_offset := ui_state.filter_pane_rect.y + (em / 2)
+
+		max_lines := len(trace.processes)
+		for proc_v, _ in trace.processes {
+			max_lines += len(proc_v.threads)
+		}
+
+		line_height : f64 = 0
+		next_line(&line_height, em)
+		displayed_lines := int(filter_pane_rect.h / line_height)
+
+		max_scroll := f64(max_lines - displayed_lines) * line_height
+		ui_state.filter_pane_scroll_pos = max(ui_state.filter_pane_scroll_pos, -max_scroll)
+		y_offset += ui_state.filter_pane_scroll_pos
+		x_offset := (em / 2)
 
 		thread_pad := (em / 2)
 
@@ -1209,31 +1226,38 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 		checkbox_width := measure_text(checked_checkbox_text, .PSize, .IconFont)
 
 		checkbox_gap := (em / 2)
-		hamburger_width := measure_text(hamburger_text, .H2Size, .IconFont)
+		filter_width := measure_text(filter_text, .H2Size, .IconFont)
 		for proc_v, _ in &trace.processes {
 			checkbox_text := proc_v.in_stats ? checked_checkbox_text : unchecked_checkbox_text
 
 			y := next_line(&y_offset, em)
-			checkbox_rect := Rect{x_offset, y, em, em}
 
-			if pt_in_rect(mouse_pos, checkbox_rect) {
-				set_cursor("pointer")
-			}
-			if clicked && pt_in_rect(clicked_pos, checkbox_rect) {
-				proc_v.in_stats = !proc_v.in_stats
-				build_selected_ranges(trace)
+			if y > filter_pane_rect.y {
+				checkbox_rect := Rect{x_offset, y, em, em}
+
+				if pt_in_rect(mouse_pos, checkbox_rect) {
+					set_cursor("pointer")
+				}
+				if clicked && pt_in_rect(clicked_pos, checkbox_rect) {
+					proc_v.in_stats = !proc_v.in_stats
+					build_selected_ranges(trace, ui_state)
+				}
+
+				draw_text(rects, checkbox_text, Vec2{checkbox_rect.x, checkbox_rect.y}, .PSize, .IconFont, toolbar_text_color)
+				draw_text(rects, get_proc_name(trace, &proc_v), Vec2{x_offset + checkbox_width + checkbox_gap, y - (em / 4)}, .PSize, .DefaultFont, toolbar_text_color)
 			}
 
-			draw_text(rects, checkbox_text, Vec2{checkbox_rect.x, checkbox_rect.y}, .PSize, .IconFont, toolbar_text_color)
-			draw_text(rects, get_proc_name(trace, &proc_v), Vec2{x_offset + checkbox_width + checkbox_gap, y - (em / 4)}, .PSize, .DefaultFont, toolbar_text_color)
-			if y_offset >= info_pane_rect.y {
-				break
-			}
 
 			for thread, _ in &proc_v.threads {
 				checkbox_text := thread.in_stats ? checked_checkbox_text : unchecked_checkbox_text
 
 				y := next_line(&y_offset, em)
+				if y < filter_pane_rect.y {
+					continue
+				}
+				if y >= ui_state.height {
+					break
+				}
 
 				checkbox_rect := Rect{x_offset + thread_pad, y, em, em}
 				draw_text(rects, checkbox_text, Vec2{checkbox_rect.x, checkbox_rect.y}, .PSize, .IconFont, toolbar_text_color)
@@ -1244,17 +1268,19 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 				}
 				if clicked && pt_in_rect(clicked_pos, checkbox_rect) {
 					thread.in_stats = !thread.in_stats
-					build_selected_ranges(trace)
+					build_selected_ranges(trace, ui_state)
 				}
+			}
 
-				if y_offset >= info_pane_rect.y {
-					break
-				}
+			if y >= ui_state.height {
+				break
 			}
 		}
 	}
 
 	x_subpad := em
+	stats_pane_x := x_subpad + stats_pane_rect.x
+	pane_gapped_start_y := stats_pane_rect.y + ui_state.top_line_gap
 
 	// If the user selected a single rectangle
 	if selected_event.pid != -1 && selected_event.tid != -1 && selected_event.did != -1 && selected_event.eid != -1 {
@@ -1267,15 +1293,15 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 
 		thread := trace.processes[p_idx].threads[t_idx]
 		event := thread.depths[d_idx].events[e_idx]
-		draw_text(rects, in_getstr(&trace.string_block, event.name), Vec2{x_subpad, next_line(&y, em)}, .PSize, .MonoFont, text_color)
+		draw_text(rects, in_getstr(&trace.string_block, event.name), Vec2{stats_pane_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 
 		if event.args > 0 {
 			args_str := in_getstr(&trace.string_block, event.args)
-			draw_text(rects, fmt.tprintf(" user data: %s", args_str), Vec2{x_subpad, next_line(&y, em)}, .PSize, .MonoFont, text_color)
+			draw_text(rects, fmt.tprintf(" user data: %s", args_str), Vec2{stats_pane_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 		}
-		draw_text(rects, fmt.tprintf("start time:%s", time_fmt(f64(event.timestamp - trace.total_min_time))), Vec2{x_subpad, next_line(&y, em)}, .PSize, .MonoFont, text_color)
-		draw_text(rects, fmt.tprintf("  duration:%s", time_fmt(f64(bound_duration(&event, thread.max_time)))), Vec2{x_subpad, next_line(&y, em)}, .PSize, .MonoFont, text_color)
-		draw_text(rects, fmt.tprintf(" self time:%s", time_fmt(f64(event.self_time))), Vec2{x_subpad, next_line(&y, em)}, .PSize, .MonoFont, text_color)
+		draw_text(rects, fmt.tprintf("start time:%s", time_fmt(f64(event.timestamp - trace.total_min_time))), Vec2{stats_pane_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
+		draw_text(rects, fmt.tprintf("  duration:%s", time_fmt(f64(bound_duration(&event, thread.max_time)))), Vec2{stats_pane_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
+		draw_text(rects, fmt.tprintf(" self time:%s", time_fmt(f64(event.self_time))), Vec2{stats_pane_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 
 		// If we've got stats cooking already
 	} else if stats_state == .Pass1 || stats_state == .Pass2 {
@@ -1325,7 +1351,8 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 
 		column_gap := 1.5 * em
 
-		cursor := x_subpad
+		stats_pane_start := stats_pane_x - x_subpad
+		cursor := stats_pane_x
 
 		text_outf :: proc(rects: ^[dynamic]DrawRect, cursor: ^f64, y: f64, str: string, color := text_color) {
 			width := measure_text(str, .PSize, .MonoFont)
@@ -1337,7 +1364,7 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 
 		y += header_height + (em / 2)
 
-		displayed_lines := int(ui_state.info_pane_height / ui_state.line_height) - 1
+		displayed_lines := int(ui_state.stats_pane_rect.h / ui_state.line_height) - 1
 		if displayed_lines < len(trace.stats.entries) {
 			max_lines := len(trace.stats.entries)
 
@@ -1347,8 +1374,8 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 			line_height := tmp - y
 
 			max_scroll := (f64(max_lines - displayed_lines) * line_height) + em
-			info_pane_scroll = max(info_pane_scroll, -max_scroll)
-			y += info_pane_scroll
+			ui_state.stats_pane_scroll_pos = max(ui_state.stats_pane_scroll_pos, -max_scroll)
+			y += ui_state.stats_pane_scroll_pos
 		}
 
 		stat_idx := 0
@@ -1373,7 +1400,7 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 			y_after    := y_before
 			next_line(&y_after, em)
 
-			click_rect := Rect{0, y_before, ui_state.width, 2 * em}
+			click_rect := Rect{stats_pane_start, y_before, ui_state.width, 2 * em}
 			if pt_in_rect(mouse_pos, click_rect) {
 				set_cursor("pointer")
 			}
@@ -1390,7 +1417,7 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 				draw_rect(rects, click_rect, highlight_color)
 			}
 
-			cursor = x_subpad
+			cursor = stats_pane_x
 
 			total_perc := (f64(stat.total_time) / f64(total_tracked_time)) * 100
 
@@ -1447,11 +1474,11 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 		}
 
 		y = header_start
-		cursor = 0
+		cursor = stats_pane_x - x_subpad
 
 		table_header_height := 2 * em
-		draw_rect(rects, Rect{0, pane_start_y, ui_state.width, table_header_height + ui_state.top_line_gap}, subbar_color)
-		draw_line(rects, Vec2{0, pane_start_y}, Vec2{ui_state.width, pane_start_y}, 1, line_color)
+		draw_rect(rects, Rect{cursor, pane_start_y, ui_state.width, table_header_height + ui_state.top_line_gap}, subbar_color)
+		draw_line(rects, Vec2{cursor, pane_start_y}, Vec2{ui_state.width, pane_start_y}, 1, line_color)
 
 		column_header :: proc(rects: ^[dynamic]DrawRect, cursor: ^f64, column_gap, text_y, rect_y, pane_h: f64, text: string, sort_type: SortState) {
 			start_x := cursor^
@@ -1510,8 +1537,8 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 	} else if info_pane_rect.h > ((ui_state.line_height * 2) + (ui_state.top_line_gap * 2)) {
 		y := info_pane_rect.y + info_pane_rect.h - (ui_state.top_line_gap * 2)
 
-		draw_text(rects, "Shift-click and drag to get stats for multiple rectangles", Vec2{x_subpad, prev_line(&y, em)}, .PSize, .DefaultFont, text_color)
-		draw_text(rects, "Click on a rectangle to inspect", Vec2{x_subpad, prev_line(&y, em)}, .PSize, .DefaultFont, text_color)
+		draw_text(rects, "Shift-click and drag to get stats for multiple rectangles", Vec2{stats_pane_x, prev_line(&y, em)}, .PSize, .DefaultFont, text_color)
+		draw_text(rects, "Click on a rectangle to inspect", Vec2{stats_pane_x, prev_line(&y, em)}, .PSize, .DefaultFont, text_color)
 	}
 }
 
@@ -1520,10 +1547,6 @@ process_multiselect :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, pan_delta:
 	inner_flamegraph_rect := ui_state.inner_flamegraph_rect
 	padded_flamegraph_rect := ui_state.padded_flamegraph_rect
 	info_pane_rect := ui_state.info_pane_rect
-
-	if pt_in_rect(clicked_pos, ui_state.stats_options_rect) && ui_state.stats_options_open {
-		return
-	}
 
 	// Handle single-select
 	if mouse_up_now && !did_pan && pt_in_rect(clicked_pos, inner_flamegraph_rect) && pressed_event == released_event && !shift_down {
@@ -1614,7 +1637,7 @@ process_multiselect :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, pan_delta:
 		// push it into screen-space
 		flopped_rect.x -= full_flamegraph_rect.x
 
-		build_selected_ranges(trace)
+		build_selected_ranges(trace, ui_state)
 	}
 }
 
@@ -1674,8 +1697,9 @@ sort_stats :: proc(trace: ^Trace) {
 }
 
 process_inputs :: proc(trace: ^Trace, dt: f64, ui_state: ^UIState) -> (i64, i64, Vec2) {
-	info_pane_rect  := ui_state.info_pane_rect
-	minimap_rect    := ui_state.minimap_rect
+	filter_pane_rect  := ui_state.filter_pane_rect
+	stats_pane_rect   := ui_state.stats_pane_rect
+	minimap_rect      := ui_state.minimap_rect
 	full_flamegraph_rect := ui_state.full_flamegraph_rect
 	inner_flamegraph_rect := ui_state.inner_flamegraph_rect
 	padded_flamegraph_rect := ui_state.padded_flamegraph_rect
@@ -1698,16 +1722,22 @@ process_inputs :: proc(trace: ^Trace, dt: f64, ui_state: ^UIState) -> (i64, i64,
 		if pt_in_rect(mouse_pos, inner_flamegraph_rect) {
 			cam.target_scale *= math.pow(1.0025, -scroll_val_y)
 			cam.target_scale  = min(max(cam.target_scale, min_scale), max_scale)
-		} else if pt_in_rect(mouse_pos, info_pane_rect) {
-			info_pane_scroll_vel -= scroll_val_y * 10
+		} else if pt_in_rect(mouse_pos, filter_pane_rect) {
+			ui_state.filter_pane_scroll_vel -= scroll_val_y * 10
+		} else if pt_in_rect(mouse_pos, stats_pane_rect) {
+			ui_state.stats_pane_scroll_vel -= scroll_val_y * 10
 		} else if pt_in_rect(mouse_pos, minimap_rect) {
 			cam.vel.y += scroll_val_y * 10
 		}
 		scroll_val_y = 0
 
-		info_pane_scroll += (info_pane_scroll_vel * dt)
-		info_pane_scroll_vel *= math.pow(0.000001, dt)
-		info_pane_scroll = min(info_pane_scroll, 0)
+		ui_state.stats_pane_scroll_pos += (ui_state.stats_pane_scroll_vel * dt)
+		ui_state.stats_pane_scroll_vel *= math.pow(0.000001, dt)
+		ui_state.stats_pane_scroll_pos = min(ui_state.stats_pane_scroll_pos, 0)
+
+		ui_state.filter_pane_scroll_pos += (ui_state.filter_pane_scroll_vel * dt)
+		ui_state.filter_pane_scroll_vel *= math.pow(0.000001, dt)
+		ui_state.filter_pane_scroll_pos = min(ui_state.filter_pane_scroll_pos, 0)
 
 		cam.current_scale += (cam.target_scale - cam.current_scale) * (1 - math.pow(math.pow_f64(0.1, 12), (dt)))
 		cam.current_scale = min(max(cam.current_scale, min_scale), max_scale)
@@ -1814,8 +1844,8 @@ process_inputs :: proc(trace: ^Trace, dt: f64, ui_state: ^UIState) -> (i64, i64,
 	return start_time, end_time, pan_delta
 }
 
-build_selected_ranges :: proc(trace: ^Trace) {
-	init_stat_state(trace)
+build_selected_ranges :: proc(trace: ^Trace, ui_state: ^UIState) {
+	init_stat_state(trace, ui_state)
 
 	// build out ranges
 	for proc_v, p_idx in trace.processes {
@@ -1874,13 +1904,15 @@ build_selected_ranges :: proc(trace: ^Trace) {
 	}
 }
 
-init_stat_state :: proc(trace: ^Trace) {
+init_stat_state :: proc(trace: ^Trace, ui_state: ^UIState) {
 	stats_state = .Pass1
 	total_tracked_time = 0
 	cur_stat_offset = StatOffset{}
 	selected_event = {-1, -1, -1, -1}
-	info_pane_scroll = 0
-	info_pane_scroll_vel = 0
+
+	ui_state.stats_pane_scroll_pos = 0
+	ui_state.stats_pane_scroll_vel = 0
+
 	stats_just_started = true
 
 	sm_clear(&trace.stats)

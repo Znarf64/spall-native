@@ -35,8 +35,18 @@ UIState :: struct {
 	global_activity_rect: Rect,
 	global_timebar_rect:  Rect,
 	local_timebar_rect:   Rect,
+
 	info_pane_rect:       Rect,
-	stats_options_rect:   Rect,
+	tab_rect:             Rect,
+
+	filter_pane_rect:      Rect,
+	filter_pane_scroll_pos: f64,
+	filter_pane_scroll_vel: f64,
+
+	stats_pane_rect:      Rect,
+	stats_pane_scroll_pos: f64,
+	stats_pane_scroll_vel: f64,
+
 	minimap_rect:         Rect,
 
 	full_flamegraph_rect:   Rect,
@@ -46,7 +56,7 @@ UIState :: struct {
 	render_one_more: bool,
 	multiselecting: bool,
 	resizing_pane: bool,
-	stats_options_open: bool,
+	filters_open: bool,
 }
 
 DrawRect :: struct #packed {
