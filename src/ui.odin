@@ -1953,7 +1953,7 @@ process_stats :: proc(trace: ^Trace, ui_state: ^UIState) {
 					name := in_getstr(&trace.string_block, ev.name)
 					s, ok := sm_get(&trace.stats, ev.name)
 					if !ok {
-						s = sm_insert(&trace.stats, ev.name, Stats{min_time = max(i64)})
+						s = sm_insert(&trace.stats, ev.name, Stats{min_time = max(i64), max_time = min(i64)})
 					}
 
 					s.count += 1
@@ -1994,18 +1994,19 @@ process_stats :: proc(trace: ^Trace, ui_state: ^UIState) {
 					}
 
 					duration := bound_duration(&ev, thread.max_time)
-					name := in_getstr(&trace.string_block, ev.name)
-					s, ok := sm_get(&trace.stats, ev.name)
+					s, _ := sm_get(&trace.stats, ev.name)
 
+					idx: u32
 					if (s.max_time - s.min_time <= 0) {
-						s.hist[50] += 1
+						idx = 50
 					} else {
-						t := (duration - s.min_time) / (s.max_time - s.min_time)
+						t := f64(duration - s.min_time) / f64(s.max_time - s.min_time)
 						t = min(1, max(t, 0))
 						t *= 99
-						s.hist[u32(t)] += 1
+						idx = u32(t)
 					}
 
+					s.hist[idx] += 1
 					event_count += 1
 				}
 			}
