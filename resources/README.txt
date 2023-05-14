@@ -12,7 +12,7 @@ Acknowledgments
 -=-=-=-=-=-=-=-=
 Thank you for purchasing a copy of Spall and supporting its continued development.
 
-Big thanks to pmttavera for major early help getting the look-and-feel right for the initial launch, working through
+Big thanks to pmttavara for major early help getting the look-and-feel right for the initial launch, working through
 early performance issues, and designing the first c library for tracing native code.
 
 Thanks to Ben Visness and Abner Coimbre for the push to make, ship, and demo a profiler to help
@@ -32,3 +32,5 @@ Spall would not be possible without the following pieces of software and fonts:
  * SDL2: https://github.com/libsdl-org/SDL
  * FontAwesome by Dave Gandy - https://fontawesome.com/
  * FiraCode: https://github.com/tonsky/FiraCode
+
+demo_trace.json comes courtesy of NeGate, from his Cuik C compiler
