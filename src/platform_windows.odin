@@ -1,7 +1,6 @@
 //+build windows
 package main
 
-import "core:fmt"
 import "core:strings"
 import "core:sys/windows"
 
@@ -42,10 +41,8 @@ open_file_dialog :: proc() -> (string, bool) {
 		return "", false
 	}
 
-	file_name, _ := windows.utf16_to_utf8(path_buf[:])
+	file_name, _ := windows.utf16_to_utf8(path_buf[:], context.temp_allocator)
 	trimmed_name := strings.trim_right_null(file_name)
 	path := strings.clone(trimmed_name)
-
-	fmt.printf("path: %s\n", path)
 	return path, true
 }
