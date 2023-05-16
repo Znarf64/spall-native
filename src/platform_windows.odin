@@ -46,3 +46,8 @@ open_file_dialog :: proc() -> (string, bool) {
 	path := strings.clone(trimmed_name)
 	return path, true
 }
+
+// we don't actually demangle on Windows, because Windows.
+demangle_symbol :: proc(name: string, tmp_buffer: []u8) -> (string, bool) {
+	return name, true
+}
