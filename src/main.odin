@@ -11,6 +11,7 @@ import "core:runtime"
 import "core:slice"
 import "core:container/queue"
 import "core:container/lru"
+import "core:prof/spall"
 
 import glm "core:math/linalg/glsl"
 
@@ -18,9 +19,6 @@ import SDL "vendor:sdl2"
 import gl "vendor:OpenGL"
 
 import SDL_TTF "vendor:sdl2/ttf"
-
-import "formats:spall"
-
 
 // input state
 is_mouse_down  := false
@@ -224,8 +222,27 @@ load_config :: proc(pool: ^Pool, trace: ^Trace) -> bool {
 	return true
 }
 
+spall_ctx: spall.Context
+spall_buffer: spall.Buffer
+
+SELF_TRACE :: false
+FULL_SPEED :: false
 terminal_mode := false
 main :: proc() {
+
+	when SELF_TRACE {
+		current_time := time.time_to_unix(time.now())
+		trace_name := fmt.tprintf("spall_timing_%d.spall", current_time)
+		spall_ctx = spall.context_create(trace_name)
+		defer spall.context_destroy(&spall_ctx)
+
+		buffer_backing := make([]u8, spall.BUFFER_DEFAULT_SIZE)
+		spall_buffer = spall.buffer_create(buffer_backing)
+		defer spall.buffer_destroy(&spall_ctx, &spall_buffer)
+
+		spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "")
+	}
+
 
 	// If the user passed us a trace, save off the filename now
 	if len(os.args) == 2 {
@@ -288,7 +305,12 @@ main :: proc() {
 	}
 
 	gl.load_up_to(GL_VERSION_MAJOR, GL_VERSION_MINOR, SDL.gl_set_proc_address)
-	SDL.GL_SetSwapInterval(-1)
+
+	if FULL_SPEED {
+		SDL.GL_SetSwapInterval(0)
+	} else {
+		SDL.GL_SetSwapInterval(-1)
+	}
 
 	version_str := gl.GetString(gl.VERSION)
 	if version_str == "1.1.0" {
@@ -526,6 +548,10 @@ main :: proc() {
 			}
 		}
 
+		when SELF_TRACE {
+			spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "frame")
+		}
+
 		if should_toggle_fullscreen {
 			fullscreen = !fullscreen
 			if fullscreen {
@@ -733,6 +759,10 @@ should_sleep :: proc(cam: ^Camera, ui_state: ^UIState) -> bool {
 	PAN_Y_EPSILON :: 1.0
 	SCALE_EPSILON :: 0.01
 	SCROLL_EPSILON :: 0.01
+
+	if FULL_SPEED {
+		return false
+	}
 
 	panning_x := math.abs(cam.pan.x - cam.target_pan_x) > PAN_X_EPSILON
 	panning_y := math.abs(cam.vel.y - 0) > PAN_Y_EPSILON

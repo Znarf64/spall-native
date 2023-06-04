@@ -7,20 +7,20 @@ import "core:mem"
 import "core:os"
 import "core:strconv"
 import "core:math"
-import "formats:spall"
+import "formats:spall_fmt"
 
-as_get_next_buffer :: proc(trace: ^Trace, chunk: []u8, buffer_header: ^spall.BufferHeader) -> BinaryState {
+as_get_next_buffer :: proc(trace: ^Trace, chunk: []u8, buffer_header: ^spall_fmt.Buffer_Header) -> BinaryState {
 	p := &trace.parser
 
-	if chunk_pos(p) + size_of(spall.BufferHeader) > i64(len(chunk)) {
+	if chunk_pos(p) + size_of(spall_fmt.Buffer_Header) > i64(len(chunk)) {
 		return .PartialRead
 	}
 
 	data_start := chunk[chunk_pos(p):]
-	tmp_header := (^spall.BufferHeader)(raw_data(data_start))^
+	tmp_header := (^spall_fmt.Buffer_Header)(raw_data(data_start))^
 	buffer_header^ = tmp_header
 
-	p.pos += size_of(spall.BufferHeader)
+	p.pos += size_of(spall_fmt.Buffer_Header)
 	return .EventRead
 }
 
@@ -34,15 +34,15 @@ as_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, threa
 
 	data_start := chunk[chunk_pos(p):]
 	first_lump := (^u64)(raw_data(data_start))^
-	type := spall.Auto_Event_Type(first_lump >> 56)
+	type := spall_fmt.Auto_Event_Type(first_lump >> 56)
 	#partial switch type {
 	case .MicroBegin:
-		event_sz := i64(size_of(spall.MicroBegin_Event))
+		event_sz := i64(size_of(spall_fmt.MicroBegin_Event))
 		if chunk_pos(p) + event_sz > i64(len(chunk)) {
 			return .PartialRead
 		}
 
-		event := (^spall.MicroBegin_Event)(raw_data(data_start))
+		event := (^spall_fmt.MicroBegin_Event)(raw_data(data_start))
 		raw_time := (event.time_and_type << 8) >> 8
 
 		name, ok := am_find(&trace.addr_map, event.address)
@@ -93,12 +93,12 @@ as_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, threa
 		p.pos += event_sz
 		return .EventRead
 	case .MicroEnd:
-		event_sz := i64(size_of(spall.MicroEnd_Event))
+		event_sz := i64(size_of(spall_fmt.MicroEnd_Event))
 		if chunk_pos(p) + event_sz > i64(len(chunk)) {
 			return .PartialRead
 		}
 
-		event := (^spall.MicroEnd_Event)(raw_data(data_start))
+		event := (^spall_fmt.MicroEnd_Event)(raw_data(data_start))
 		raw_time := (event.time_and_type << 8) >> 8
 
 		timestamp := i64(math.ceil(f64(raw_time) * trace.stamp_scale))
@@ -134,7 +134,7 @@ as_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, threa
 
 
 as_parse :: proc(trace: ^Trace, fd: os.Handle, header_size: i64) -> bool {
-	buffer_header := spall.BufferHeader{}
+	buffer_header := spall_fmt.Buffer_Header{}
 	p := &trace.parser
 
 	proc_idx := setup_pid(trace, 0)

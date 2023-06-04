@@ -8,11 +8,12 @@ import "core:time"
 import "core:runtime"
 import "core:path/filepath"
 
-import "formats:spall"
+import "formats:spall_fmt"
 
 FileType :: enum {
 	Json,
-	ManualStream,
+	ManualStreamV1,
+	ManualStreamV2,
 	AutoStream,
 }
 
@@ -455,24 +456,26 @@ load_file :: proc(trace: ^Trace, file_name: string) {
 
 	header_size : i64 = 0
 	file_type: FileType
-	if magic == spall.MANUAL_MAGIC {
-		hdr, ok := slice_to_type(header_buffer[:], spall.Manual_Header)
+	if magic == spall_fmt.MANUAL_MAGIC {
+		hdr, ok := slice_to_type(header_buffer[:], spall_fmt.Manual_Header)
 		if !ok {
 			post_error(trace, "%s is invalid!", file_name)
 			return
 		}
 
-		if hdr.version != 1 {
+		if hdr.version != 1 && hdr.version != 2 {
 			post_error(trace, "Spall version %d for %s is invalid!", hdr.version, file_name)
 			return
 		}
 		
 		trace.stamp_scale = hdr.timestamp_unit
-		header_size = size_of(spall.Manual_Header)
+		header_size = size_of(spall_fmt.Manual_Header)
 
-		file_type = .ManualStream
-	} else if magic == spall.AUTO_MAGIC {
-		hdr, ok := slice_to_type(header_buffer[:], spall.Auto_Header)
+		if hdr.version == 1 { file_type = .ManualStreamV1 }
+		else if hdr.version == 2 { file_type = .ManualStreamV2 }
+
+	} else if magic == spall_fmt.AUTO_MAGIC {
+		hdr, ok := slice_to_type(header_buffer[:], spall_fmt.Auto_Header)
 		if !ok {
 			post_error(trace, "%s is invalid!", file_name)
 			return
@@ -482,7 +485,7 @@ load_file :: proc(trace: ^Trace, file_name: string) {
 			post_error(trace, "Spall version %d for %s is invalid!", hdr.version, file_name)
 			return
 		}
-		if total_size < i64(size_of(spall.Auto_Header)) + i64(hdr.program_path_len) {
+		if total_size < i64(size_of(spall_fmt.Auto_Header)) + i64(hdr.program_path_len) {
 			post_error(trace, "%s is invalid!", file_name)
 			return
 		}
@@ -490,9 +493,9 @@ load_file :: proc(trace: ^Trace, file_name: string) {
 		trace.stamp_scale = hdr.timestamp_unit
 		trace.skew_address = hdr.known_address
 
-		symbol_path := string(header_buffer[size_of(spall.Auto_Header):][:hdr.program_path_len])
+		symbol_path := string(header_buffer[size_of(spall_fmt.Auto_Header):][:hdr.program_path_len])
 
-		header_size = size_of(spall.Auto_Header) + i64(hdr.program_path_len)
+		header_size = size_of(spall_fmt.Auto_Header) + i64(hdr.program_path_len)
 		if !load_executable(trace, symbol_path) {
 			return
 		}
@@ -507,8 +510,10 @@ load_file :: proc(trace: ^Trace, file_name: string) {
 
 	parsed_properly := false
 	#partial switch file_type {
-	case .ManualStream:
-		parsed_properly = ms_parse(trace, trace_fd, header_size)
+	case .ManualStreamV1:
+		parsed_properly = ms_v1_parse(trace, trace_fd, header_size)
+	case .ManualStreamV2:
+		parsed_properly = ms_v2_parse(trace, trace_fd, header_size)
 	case .AutoStream:
 		parsed_properly = as_parse(trace, trace_fd, header_size)
 	case .Json:
@@ -528,7 +533,8 @@ load_file :: proc(trace: ^Trace, file_name: string) {
 	}
 
 	#partial switch file_type {
-	case .ManualStream: fallthrough
+	case .ManualStreamV1: fallthrough
+	case .ManualStreamV2: fallthrough
 	case .AutoStream:
 		for process in &trace.processes {
 			slice.sort_by(process.threads[:], tid_sort_proc)

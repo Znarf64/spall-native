@@ -7,6 +7,8 @@ import "core:runtime"
 import "core:slice"
 import "core:strings"
 
+import "core:prof/spall"
+
 to_world_x :: proc(cam: Camera, x: f64) -> f64 {
 	return (x - cam.pan.x) / cam.current_scale
 }
@@ -429,6 +431,10 @@ draw_debug :: proc(rects: ^[dynamic]DrawRect, ui_state: ^UIState) {
 }
 
 draw_rect_tooltip :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState) {
+	when SELF_TRACE {
+		spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "")
+	}
+
 	full_flamegraph_rect := ui_state.full_flamegraph_rect
 
 	tip_pos := mouse_pos
@@ -499,6 +505,10 @@ draw_rect_tooltip :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^U
 }
 
 draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRect, trace: ^Trace, start_time, end_time: i64, ui_state: ^UIState) {
+	when SELF_TRACE {
+		spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "")
+	}
+
 	full_flamegraph_rect := ui_state.full_flamegraph_rect
 	inner_flamegraph_rect := ui_state.inner_flamegraph_rect
 	padded_flamegraph_rect := ui_state.padded_flamegraph_rect
@@ -779,6 +789,10 @@ draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRe
 }
 
 draw_global_activity :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, highlight_start_x, highlight_end_x: f64, ui_state: ^UIState) {
+	when SELF_TRACE {
+		spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "")
+	}
+
 	global_activity_rect := ui_state.global_activity_rect
 	full_flamegraph_rect := ui_state.full_flamegraph_rect
 	minimap_rect := ui_state.minimap_rect
@@ -891,9 +905,14 @@ draw_global_activity :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, highlight
 }
 
 draw_minimap :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState) {
-	minimap_rect := ui_state.minimap_rect
-	full_flamegraph_rect   := ui_state.full_flamegraph_rect
-	padded_flamegraph_rect := ui_state.padded_flamegraph_rect
+	when SELF_TRACE {
+		spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "")
+	}
+
+	minimap_rect              := ui_state.minimap_rect
+	full_flamegraph_rect      := ui_state.full_flamegraph_rect
+	info_pane_rect            := ui_state.info_pane_rect
+	padded_flamegraph_rect    := ui_state.padded_flamegraph_rect
 	flamegraph_toptext_height := ui_state.flamegraph_toptext_height
 	minimap_pad := em
 
@@ -901,14 +920,24 @@ draw_minimap :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIStat
 	draw_rect(rects, minimap_rect, bg_color)
 
 	mini_rect_height := (em / 2)
-	mini_thread_gap := 8.0
 	trace_duration := trace.total_max_time - trace.total_min_time
 	x_scale := rescale(1.0, 0, f64(trace_duration), 0, minimap_rect.w)
 	y_scale := mini_rect_height / ui_state.rect_height
 
 	tree_y : f64 = padded_flamegraph_rect.y - (cam.pan.y * y_scale)
-	for proc_v, p_idx in &trace.processes {
-		for thread, t_idx in &proc_v.threads {
+	proc_loop: for proc_v, p_idx in &trace.processes {
+		thread_loop: for thread, t_idx in &proc_v.threads {
+
+			mini_thread_gap := 8.0
+			thread_advance := ((f64(len(thread.depths)) * mini_rect_height) + mini_thread_gap)
+			if tree_y > info_pane_rect.y {
+				break proc_loop
+			}
+			if tree_y + thread_advance < 0 {
+				tree_y += thread_advance
+				continue
+			}
+
 			for depth, d_idx in &thread.depths {
 				tree := depth.tree
 
@@ -1023,7 +1052,7 @@ draw_minimap :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIStat
 				}
 			}
 
-			tree_y += ((f64(len(thread.depths)) * mini_rect_height) + mini_thread_gap)
+			tree_y += thread_advance
 		}
 	}
 
@@ -1038,6 +1067,10 @@ draw_minimap :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIStat
 }
 
 draw_topbars :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, start_time, end_time: i64, ui_state: ^UIState) {
+	when SELF_TRACE {
+		spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "")
+	}
+
 	header_rect               := ui_state.header_rect
 	global_activity_rect      := ui_state.global_activity_rect
 	global_timebar_rect       := ui_state.global_timebar_rect
@@ -1132,6 +1165,10 @@ draw_topbars :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, start_time, end_t
 INITIAL_ITER :: 500_000
 FULL_ITER    :: 2_000_000
 draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState) {
+	when SELF_TRACE {
+		spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "")
+	}
+
 	full_flamegraph_rect  := ui_state.full_flamegraph_rect
 	inner_flamegraph_rect := ui_state.inner_flamegraph_rect
 
@@ -1546,6 +1583,10 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 }
 
 process_multiselect :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, pan_delta: Vec2, dt: f64, ui_state: ^UIState) {
+	when SELF_TRACE {
+		spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "")
+	}
+
 	full_flamegraph_rect := ui_state.full_flamegraph_rect
 	inner_flamegraph_rect := ui_state.inner_flamegraph_rect
 	padded_flamegraph_rect := ui_state.padded_flamegraph_rect
@@ -1700,6 +1741,10 @@ sort_stats :: proc(trace: ^Trace) {
 }
 
 process_inputs :: proc(trace: ^Trace, dt: f64, ui_state: ^UIState) -> (i64, i64, Vec2) {
+	when SELF_TRACE {
+		spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "")
+	}
+
 	filter_pane_rect  := ui_state.filter_pane_rect
 	stats_pane_rect   := ui_state.stats_pane_rect
 	minimap_rect      := ui_state.minimap_rect
@@ -1920,6 +1965,10 @@ init_stat_state :: proc(trace: ^Trace, ui_state: ^UIState) {
 }
 
 process_stats :: proc(trace: ^Trace, ui_state: ^UIState) {
+	when SELF_TRACE {
+		spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "")
+	}
+
 	if stats_state == .Finished || stats_state == .NoStats {
 		return
 	}

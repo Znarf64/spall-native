@@ -1,4 +1,4 @@
-package spall
+package spall_fmt
 
 MANUAL_MAGIC :: u64(0x0BADF00D)
 AUTO_MAGIC   :: u64(0xABADF00D)
@@ -37,7 +37,7 @@ Auto_Event_Type :: enum u8 {
 	MicroEnd   = 2,
 }
 
-BufferHeader :: struct #packed {
+Buffer_Header :: struct #packed {
 	size: u32,
 	tid: u32,
 }
@@ -53,7 +53,7 @@ MicroEnd_Event :: struct #packed {
 	time_and_type: u64,
 }
 
-Begin_Event :: struct #packed {
+Begin_Event_V1 :: struct #packed {
 	type:     Manual_Event_Type,
 	category: u8,
 	pid:      u32,
@@ -63,10 +63,23 @@ Begin_Event :: struct #packed {
 	args_len: u8,
 }
 
-End_Event :: struct #packed {
+End_Event_V1 :: struct #packed {
 	type: Manual_Event_Type,
 	pid:  u32,
 	tid:  u32,
+	time: f64,
+}
+
+Begin_Event_V2 :: struct #packed {
+	type:     Manual_Event_Type,
+	category: u8,
+	time:     f64,
+	name_len: u8,
+	args_len: u8,
+}
+
+End_Event_V2 :: struct #packed {
+	type: Manual_Event_Type,
 	time: f64,
 }
 
