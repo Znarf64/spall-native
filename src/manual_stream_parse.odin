@@ -204,7 +204,7 @@ ms_v1_parse :: proc(trace: ^Trace, fd: os.Handle, header_size: i64) -> bool {
 	// cleanup unfinished events
 	for process in &trace.processes {
 		for thread in &process.threads {
-			assert(u16(thread.bande_q.len) == thread.current_depth)
+			assert(thread.bande_q.len == thread.current_depth)
 			for thread.current_depth > 0 {
 				jev_idx := stack_pop_back(&thread.bande_q)
 				thread.current_depth -= 1
@@ -439,7 +439,7 @@ ms_v2_parse :: proc(trace: ^Trace, fd: os.Handle, header_size: i64) -> bool {
 	// cleanup unfinished events
 	for process in &trace.processes {
 		for thread in &process.threads {
-			assert(u16(thread.bande_q.len) == thread.current_depth)
+			assert(thread.bande_q.len == thread.current_depth)
 			for thread.current_depth > 0 {
 				jev_idx := stack_pop_back(&thread.bande_q)
 				thread.current_depth -= 1

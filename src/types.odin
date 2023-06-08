@@ -207,6 +207,7 @@ Event :: struct #packed {
 	self_time: i64,
 }
 
+COLOR_CHOICES :: 16
 Trace :: struct {
 	file_name: string,
 	base_name: string,
@@ -217,7 +218,7 @@ Trace :: struct {
 
 	skew_address: u64,
 	addr_map: AMMap,
-	color_choices: [16]FVec3,
+	color_choices: [COLOR_CHOICES]FVec3,
 
 	processes: [dynamic]Process,
 	process_map: ValHash,
@@ -261,7 +262,7 @@ Depth :: struct {
 Thread :: struct {
 	min_time: i64,
 	max_time: i64,
-	current_depth: u16,
+	current_depth: int,
 
 	id: u32,
 	name: u32,
@@ -354,8 +355,8 @@ stack_free :: proc(s: ^$Q/Stack($T)) {
 }
 stack_push_back :: proc(s: ^$Q/Stack($T), elem: T) #no_bounds_check {
 	if s.len >= cap(s.arr) {
-		new_capacity := max(uint(8), uint(len(s.arr))*2)
-		resize(&s.arr, int(new_capacity))
+		new_capacity := max(8, len(s.arr)*2)
+		resize(&s.arr, new_capacity)
 	}
 	s.arr[s.len] = elem
 	s.len += 1

@@ -7,6 +7,7 @@ import "core:bytes"
 import "core:time"
 import "core:runtime"
 import "core:path/filepath"
+import "core:mem"
 
 import "formats:spall_fmt"
 
@@ -124,19 +125,18 @@ append_event :: proc(events: ^[dynamic]Event, ev: ^Event, loc := #caller_locatio
 	return
 }
 
-gen_event_color :: proc(trace: ^Trace, _events: []Event, thread_max: i64) -> (FVec3, i64) {
+gen_event_color :: proc(trace: ^Trace, _events: []Event, thread_max: i64, node: ^ChunkNode) {
 	total_weight : i64 = 0
 
 	events := _events
 
 	color := FVec3{}
-	color_weights := [len(trace.color_choices)]i64{}
+	color_weights := [COLOR_CHOICES]i64{}
 	for ev in &events {
 		idx := name_color_idx(trace, ev.name)
 
 		duration := bound_duration(&ev, thread_max)
 		if duration <= 0 {
-			//fmt.printf("weird duration: %d, %#v\n", duration, ev)
 			duration = 1
 		}
 		color_weights[idx] += duration
@@ -154,7 +154,8 @@ gen_event_color :: proc(trace: ^Trace, _events: []Event, thread_max: i64) -> (FV
 	}
 	color /= f32(weights_sum)
 
-	return color, total_weight
+	node.avg_color = color
+	node.weight = total_weight
 }
 
 print_tree :: proc(tree: []ChunkNode, head: uint) {
@@ -186,6 +187,8 @@ print_tree :: proc(tree: []ChunkNode, head: uint) {
 }
 
 chunk_events :: proc(trace: ^Trace) {
+	node := ChunkNode{}
+
 	for proc_v, p_idx in &trace.processes {
 		for tm, t_idx in &proc_v.threads {
 			for depth, d_idx in &tm.depths {
@@ -215,7 +218,7 @@ chunk_events :: proc(trace: ^Trace) {
 					start_ev := scan_arr[0]
 					end_ev := scan_arr[len(scan_arr)-1]
 
-					node := ChunkNode{}
+					mem.zero_item(&node)
 					node.start_time = start_ev.timestamp - trace.total_min_time
 					node.end_time   = end_ev.timestamp + bound_duration(&end_ev, tm.max_time) - trace.total_min_time
 
@@ -225,10 +228,7 @@ chunk_events :: proc(trace: ^Trace) {
 					node.tree_start_idx = 0
 					node.tree_child_count = 0
 
-					avg_color, weight := gen_event_color(trace, scan_arr, tm.max_time)
-					node.avg_color = avg_color
-					node.weight = weight
-
+					gen_event_color(trace, scan_arr, tm.max_time, &node)
 					append(tree, node)
 				}
 
@@ -246,7 +246,7 @@ chunk_events :: proc(trace: ^Trace) {
 						start_node := tree[start_idx]
 						end_node := tree[start_idx+(child_count - 1)]
 
-						node := ChunkNode{}
+						mem.zero_item(&node)
 						node.start_time = start_node.start_time
 						node.end_time   = end_node.end_time
 

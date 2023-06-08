@@ -7,7 +7,6 @@ import "core:math"
 import "core:fmt"
 import "core:c"
 import "core:strings"
-import "core:strconv"
 
 trap :: proc() -> ! {
 	intrinsics.trap()
@@ -252,6 +251,27 @@ parse_u32 :: proc(str: string) -> (val: u32, ok: bool) {
 		ret = (ret * 10) + u64(ch & 0xf)
 	}
 	return u32(ret), true
+}
+
+hexdigits := []u8{ '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' }
+u64_to_hexstr :: proc(buf: []byte, val: u64) -> string {
+	i := 17
+	x := val
+
+	if val == 0 {
+		buf[0] = '0'
+		buf[1] = 'x'
+		buf[2] = '0'
+		return string(buf[:3])
+	}
+
+	for ; x != 0; x /= 16 {
+		buf[i] = hexdigits[x % 16]
+		i -= 1
+	}
+	buf[i] = 'x'; i -= 1
+	buf[i] = '0'
+	return string(buf[i:])
 }
 
 // this *shouldn't* be called with 0-len strings. 

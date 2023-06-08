@@ -5,7 +5,6 @@ import "core:strings"
 import "core:slice"
 import "core:mem"
 import "core:os"
-import "core:strconv"
 import "core:math"
 import "formats:spall_fmt"
 
@@ -47,11 +46,9 @@ as_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, threa
 
 		name, ok := am_find(&trace.addr_map, event.address)
 		if !ok {
-			tmp_buf := [34]byte{}
-			tmp_buf[0] = '0'
-			tmp_buf[1] = 'x'
-			name_str := strconv.append_uint(tmp_buf[2:], event.address, 16)
-			name = in_get(&trace.intern, &trace.string_block, string(tmp_buf[:len(name_str)+2]))
+			tmp_buf := [18]byte{}
+			name_str := u64_to_hexstr(tmp_buf[:], event.address)
+			name = in_get(&trace.intern, &trace.string_block, name_str)
 		}
 
 		timestamp := i64(math.ceil(f64(raw_time) * trace.stamp_scale))
@@ -69,13 +66,13 @@ as_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, threa
 		}
 
 		process.min_time = min(process.min_time, ev.timestamp)
-		thread.min_time = min(thread.min_time, ev.timestamp)
-		thread.max_time = ev.timestamp + ev.duration
+		thread.min_time  = min(thread.min_time, ev.timestamp)
+		thread.max_time  = ev.timestamp
 
 		trace.total_min_time = min(trace.total_min_time, ev.timestamp)
-		trace.total_max_time = max(trace.total_max_time, ev.timestamp + ev.duration)
+		trace.total_max_time = max(trace.total_max_time, ev.timestamp)
 
-		if int(thread.current_depth) >= len(thread.depths) {
+		if thread.current_depth >= len(thread.depths) {
 			depth := Depth{
 				events = make([dynamic]Event),
 			}
@@ -110,7 +107,8 @@ as_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, threa
 			jev := &depth.events[jev_idx]
 			jev.duration = timestamp - jev.timestamp
 			jev.self_time = jev.duration - jev.self_time
-			thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)
+
+			thread.max_time      = max(thread.max_time, jev.timestamp + jev.duration)
 			trace.total_max_time = max(trace.total_max_time, jev.timestamp + jev.duration)
 
 			if thread.bande_q.len > 0 {
@@ -211,7 +209,7 @@ as_parse :: proc(trace: ^Trace, fd: os.Handle, header_size: i64) -> bool {
 	// cleanup unfinished events
 	for process in &trace.processes {
 		for thread in &process.threads {
-			assert(u16(thread.bande_q.len) == thread.current_depth)
+			assert(thread.bande_q.len == thread.current_depth)
 			for thread.current_depth > 0 {
 				jev_idx := stack_pop_back(&thread.bande_q)
 				thread.current_depth -= 1

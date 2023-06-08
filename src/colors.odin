@@ -119,11 +119,11 @@ set_color_mode :: proc(auto: bool, is_dark: bool) {
 
 // color_choices must be power of 2
 name_color_idx :: proc(trace: ^Trace, name_idx: u32) -> u32 {
-	return name_idx & u32(len(trace.color_choices) - 1)
+	return name_idx & u32(COLOR_CHOICES - 1)
 }
 
 generate_color_choices :: proc(trace: ^Trace) {
-	for i := 0; i < len(trace.color_choices); i += 1 {
+	for i := 0; i < COLOR_CHOICES; i += 1 {
 
 		h := rand.float32() * 0.5 + 0.5
 		h *= h
