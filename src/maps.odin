@@ -407,9 +407,10 @@ am_hash :: proc(key: u64) -> u32 {
 }
 
 am_find :: proc (v: ^AMMap, key: u64) -> (u32, bool) {
-	hv := u64(am_hash(key)) & u64(len(v.hashes) - 1)
-	for i: u64 = 0; i < u64(len(v.hashes)); i += 1 {
-		idx := (hv + i) & u64(len(v.hashes) - 1)
+	hashes_len := u64(len(v.hashes))
+	hv := u64(am_hash(key)) & (hashes_len - 1)
+	for i: u64 = 0; i < hashes_len; i += 1 {
+		idx := (hv + i) & (hashes_len - 1)
 
 		e_idx := v.hashes[idx]
 		if e_idx == -1 {

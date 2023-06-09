@@ -51,7 +51,7 @@ as_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, threa
 			name = in_get(&trace.intern, &trace.string_block, name_str)
 		}
 
-		timestamp := i64(math.ceil(f64(raw_time) * trace.stamp_scale))
+		timestamp := i64(ceil_f64(f64(raw_time) * trace.stamp_scale))
 		ev := Event{
 			name = name,
 			duration = -1,
@@ -98,7 +98,7 @@ as_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, threa
 		event := (^spall_fmt.MicroEnd_Event)(raw_data(data_start))
 		raw_time := (event.time_and_type << 8) >> 8
 
-		timestamp := i64(math.ceil(f64(raw_time) * trace.stamp_scale))
+		timestamp := i64(ceil_f64(f64(raw_time) * trace.stamp_scale))
 		if thread.bande_q.len > 0 {
 			jev_idx := stack_pop_back(&thread.bande_q)
 			thread.current_depth -= 1

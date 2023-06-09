@@ -324,6 +324,24 @@ parse_f64 :: proc(str: string) -> (ret: f64, ok: bool) #no_bounds_check {
 	return sign * val, true
 }
 
+// This only works for positive doubles. Don't be a dummy and use negative doubles
+squashy_downer : f64 = 1 / math.F64_EPSILON
+ceil_f64 :: proc(x: f64) -> f64 {
+	i := transmute(u64)x
+
+	e := int((i >> 52) & 0x7FF)
+	if e >= (0x3FF + 52) || x == 0 {
+		return x
+	}
+
+	y := x + squashy_downer - squashy_downer - x
+	if e <= 0x3FF - 1 { return 1.0 }
+	if y < 0 {
+		return x + y + 1
+	}
+	return x + y
+}
+
 distance :: proc(p1, p2: Vec2) -> f64 {
 	dx := p2.x - p1.x
 	dy := p2.y - p1.y
