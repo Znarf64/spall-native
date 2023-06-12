@@ -238,7 +238,7 @@ Trace :: struct {
 	error_storage: [4096]u8,
 }
 
-BUCKET_SIZE :: 4
+BUCKET_SIZE :: 32
 CHUNK_NARY_WIDTH :: 4
 ChunkNode :: struct #packed {
 	start_time: i64,
