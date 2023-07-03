@@ -520,7 +520,7 @@ draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRe
 	info_pane_rect := ui_state.info_pane_rect
 
 	// graph-relative timebar and subdivisions
-	division_ns, draw_tick_start_ns: f64
+	division_ns, draw_tick_start_ns, display_range_start_ns: f64
 	ticks: int
 	{
 		// figure out how many divisions to split the current scale into
@@ -534,7 +534,7 @@ draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRe
 		else if rem < 0.6 { division_ns -= (division_ns / 2)   } // multiples of 5
 
 		// find the current range in ns
-		display_range_start_ns := (                     (0 - cam.pan.x) / cam.current_scale) * trace.stamp_scale
+		display_range_start_ns =  (                     (0 - cam.pan.x) / cam.current_scale) * trace.stamp_scale
 		display_range_end_ns   := ((full_flamegraph_rect.w - cam.pan.x) / cam.current_scale) * trace.stamp_scale
 
 		// round down to make sure we get the first line on screen
@@ -794,7 +794,8 @@ draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRe
 	div_clump_idx, fract_val, period := get_div_clump_idx(division_ns)
 	text_side_pad := em
 	old_tick_val: f64 = 0
-	early_str, _, early_tick := clump_time(f_round_down(draw_tick_start_ns, division_ns), div_clump_idx)
+	early_str, _, _ := clump_time(display_range_start_ns, div_clump_idx)
+	_, _, early_tick := clump_time(f_round_down(draw_tick_start_ns, division_ns), div_clump_idx)
 	old_tick_val = early_tick
 
 	for i := -1; i < ticks; i += 1 {
@@ -815,21 +816,18 @@ draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRe
 
 		if draw_top {
 			top_x := ui_state.side_pad + x_off - ((top_text_width + text_side_pad) / 2)
-			draw_rect(rects, Rect{top_x, time_high_y - (text_side_pad / 2), top_text_width + text_side_pad, em + (text_side_pad / 2)}, tabbar_color)
+			draw_rect(rects, Rect{top_x, full_flamegraph_rect.y, top_text_width + text_side_pad, em + (text_side_pad / 2)}, tabbar_color)
 			draw_text(rects, start_str, Vec2{top_x + (text_side_pad / 2), time_high_y - (text_side_pad / 2)}, .PSize, .DefaultFont, text_color)
 		}
 		draw_text(rects, tick_str, Vec2{ui_state.side_pad + x_off - (tick_text_width / 2), time_tick_y}, .PSize, .DefaultFont, text_color)
 	}
 
 	{
-		scaled_tick_time := draw_tick_start_ns / trace.stamp_scale
-		x_off := (scaled_tick_time * cam.current_scale) + cam.pan.x
 		if len(early_str) > 0 {
 			top_text_width := measure_text(early_str, .PSize, .DefaultFont)
-			top_x := ui_state.side_pad + x_off - ((top_text_width + text_side_pad) / 2)
-			early_x := max(ui_state.side_pad, top_x)
-			draw_rect(rects, Rect{early_x, time_high_y - (text_side_pad / 2), top_text_width + text_side_pad, em + (text_side_pad / 2)}, tabbar_color)
-			draw_text(rects, early_str, Vec2{early_x + (text_side_pad / 2), time_high_y - (text_side_pad / 2)}, .PSize, .DefaultFont, text_color)
+			draw_rect(rects, Rect{ui_state.side_pad, full_flamegraph_rect.y, top_text_width + text_side_pad, em + (text_side_pad / 2)}, toolbar_color)
+			draw_text(rects, early_str, Vec2{ui_state.side_pad + (text_side_pad / 2), time_high_y - (text_side_pad / 2)}, .PSize, .DefaultFont, toolbar_text_color)
+			draw_line(rects, Vec2{ui_state.side_pad, full_flamegraph_rect.y}, Vec2{ui_state.side_pad, full_flamegraph_rect.y + flamegraph_toptext_height}, 5, toolbar_color)
 		}
 	}
 }

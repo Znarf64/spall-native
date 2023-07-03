@@ -323,10 +323,16 @@ main :: proc() {
 
 	real_window_width: i32
 	real_window_height: i32
+	pretend_window_width: i32
+	pretend_window_height: i32
+	SDL.GetWindowSize(window, &pretend_window_width, &pretend_window_height)
 	SDL.GL_GetDrawableSize(window, &real_window_width, &real_window_height)
-	dpr = f64(real_window_width) / f64(orig_window_width)
-	width := f64(orig_window_width)
-	height := f64(orig_window_height)
+
+	dpr_w := f64(real_window_width) / f64(pretend_window_width)
+	dpr_h := f64(real_window_height) / f64(pretend_window_height)
+	dpr = dpr_w
+	width := f64(pretend_window_width)
+	height := f64(pretend_window_height)
 
 	lru.init(&lru_text_cache, 1000)
 	lru_text_cache.on_remove = rm_text_cache
