@@ -4,8 +4,20 @@ package main
 import "core:strings"
 import "core:sys/windows"
 
-platform_init :: proc() {
+foreign import user32 "system:User32.lib"
+foreign user32 {
+    GetDpiForSystem :: proc() -> u32 ---
+}
+
+platform_pre_init :: proc() {
 	velocity_multiplier = -100
+	windows.SetProcessDpiAwarenessContext(windows.DPI_AWARENESS_CONTEXT_SYSTEM_AWARE)
+
+}
+platform_post_init :: proc() { }
+
+platform_get_dpi :: proc() -> f64 {
+    return f64(GetDpiForSystem()) / 96.0
 }
 
 open_file_dialog :: proc() -> (string, bool) {

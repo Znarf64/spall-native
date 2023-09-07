@@ -9,3 +9,6 @@ if "%1"=="release" (
 ) else (
     odin build src -collection:formats=formats -out:bin\spall.exe -debug -keep-temp-files -resource:resources\spall.rc
 )
+
+copy resources\SDL2.dll bin\
+copy resources\SDL2_ttf.dll bin\

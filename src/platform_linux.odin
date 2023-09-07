@@ -8,8 +8,13 @@ import "core:fmt"
 import "core:strings"
 import "core:time"
 
-platform_init :: proc() {
+platform_pre_init :: proc() {
 	velocity_multiplier = -100
+}
+platform_post_init :: proc() { }
+
+platform_get_dpi :: proc() -> f64 {
+	return 0
 }
 
 open_file_dialog :: proc() -> (string, bool) {

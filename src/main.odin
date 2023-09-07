@@ -97,10 +97,10 @@ loading_config := false
 post_loading := true
 
 // gl-rect nonsense
-idx_pos := [?]glm.vec2{ 
-	{0.0, 0.0}, 
-	{1.0, 0.0}, 
-	{0.0, 1.0}, 
+idx_pos := [?]glm.vec2{
+	{0.0, 0.0},
+	{1.0, 0.0},
+	{0.0, 1.0},
 	{1.0, 1.0},
 }
 
@@ -138,7 +138,7 @@ grab_dynamic_fonts :: proc(names: []string, sizes: []f64) -> []^SDL_TTF.Font {
 	for filename in names {
 		full_path := strings.concatenate([]string{path_str, filename})
 		full_path_cstring := strings.clone_to_cstring(full_path)
-		
+
 		rw := SDL.RWFromFile(full_path_cstring, "rb")
 		for size in sizes {
 			font, ok := load_font(rw, i32(size))
@@ -178,7 +178,7 @@ ThreadFileLoadState :: struct {
 
 threaded_config_load :: proc(pool: ^Pool, data: rawptr) {
 	state := cast(^ThreadFileLoadState)(data)
-	
+
 	trace := state.trace
 	filename := state.filename
 	free(state)
@@ -261,6 +261,15 @@ main :: proc() {
 	orig_window_width: i32 = 1280
 	orig_window_height: i32 = 720
 
+	platform_pre_init()
+
+	dpr_attempt := platform_get_dpi()
+	if dpr_attempt > 0 {
+		dpr = dpr_attempt
+		orig_window_width = i32(f64(orig_window_width) * dpr)
+		orig_window_height = i32(f64(orig_window_height) * dpr)
+	}
+
 	set_color_mode(false, true)
 
 	SDL.Init({.VIDEO})
@@ -284,7 +293,7 @@ main :: proc() {
 		return
 	}
 
-	platform_init()
+	platform_post_init()
 
 	default_cursor = SDL.CreateSystemCursor(.ARROW)
 	pointer_cursor = SDL.CreateSystemCursor(.HAND)
@@ -320,12 +329,17 @@ main :: proc() {
 	pretend_window_height: i32
 	SDL.GetWindowSize(window, &pretend_window_width, &pretend_window_height)
 	SDL.GL_GetDrawableSize(window, &real_window_width, &real_window_height)
-
-	dpr_w := f64(real_window_width) / f64(pretend_window_width)
-	dpr_h := f64(real_window_height) / f64(pretend_window_height)
-	dpr = dpr_w
 	width := f64(pretend_window_width)
 	height := f64(pretend_window_height)
+
+	// on certain platforms (windows) we need to grab the DPI explicitly, on certain (mac or linux)
+	// we can infer it from the window size we got vs the window size we asked for (it scales it up
+	// based on DPI).
+	if dpr < 0 {
+		dpr_w := f64(real_window_width) / f64(pretend_window_width)
+		dpr_h := f64(real_window_height) / f64(pretend_window_height)
+		dpr = dpr_w
+	}
 
 	lru.init(&lru_text_cache, 1000)
 	lru_text_cache.on_remove = rm_text_cache
@@ -395,7 +409,7 @@ main :: proc() {
 	gl.VertexAttribPointer(u32(VertAttrs.IdxPos), 2, gl.FLOAT, false, 0, 0)
 
 	ch_width = measure_text("a", .PSize, .MonoFont)
-	
+
 	rects := make([dynamic]DrawRect)
 	text_rects := make([dynamic]TextRect)
 
@@ -496,12 +510,12 @@ main :: proc() {
 					last_frame_count = frame_count
 				}
 
-				mouse_pos = Vec2{f64(event.motion.x), f64(event.motion.y)}
+				mouse_pos = Vec2{f64(event.motion.x) / dpr, f64(event.motion.y) / dpr}
 			case .MOUSEBUTTONDOWN:
 				switch event.button.button {
 				case SDL.BUTTON_LEFT:
 					is_mouse_down = true
-					mouse_pos = Vec2{f64(event.button.x), f64(event.button.y)}
+					mouse_pos = Vec2{f64(event.button.x) / dpr, f64(event.button.y) / dpr}
 
 					if frame_count != last_frame_count {
 						last_mouse_pos = mouse_pos
@@ -523,7 +537,7 @@ main :: proc() {
 						last_frame_count = frame_count
 					}
 
-					mouse_pos = Vec2{f64(event.button.x), f64(event.button.y)}
+					mouse_pos = Vec2{f64(event.button.x) / dpr, f64(event.button.y) / dpr}
 				}
 			case .MOUSEWHEEL:
 				y_dist := f64(event.wheel.y) * velocity_multiplier
@@ -561,9 +575,9 @@ main :: proc() {
 			height = f64(ih)
 		}
 
-		gl.Viewport(0, 0, i32(width * dpr), i32(height * dpr))
+		gl.Viewport(0, 0, i32(width), i32(height))
 		gl.Uniform1f(u_dpr, f32(dpr))
-		gl.Uniform2f(u_res, f32(width * dpr), f32(height * dpr))
+		gl.Uniform2f(u_res, f32(width), f32(height))
 		gl.BindBuffer(gl.ARRAY_BUFFER, rect_deets_buffer)
 		gl.BindVertexArray(vao);
 
@@ -573,11 +587,14 @@ main :: proc() {
 
 		gl.ClearColor(
 			f32(bg_color2.x) / 255,
-			f32(bg_color2.y) / 255, 
+			f32(bg_color2.y) / 255,
 			f32(bg_color2.z) / 255,
 			f32(bg_color2.w) / 255,
 		)
 		gl.Clear(gl.COLOR_BUFFER_BIT)
+
+		ui_state.height = height / dpr
+		ui_state.width  = width / dpr
 
 		if loading_config {
 			offset := trace.parser.offset
@@ -588,9 +605,9 @@ main :: proc() {
 
 			load_box := Rect{0, 0, 100, 100}
 			load_box = Rect{
-				(width / 2) - (load_box.w / 2) - pad_size, 
-				(height / 2) - (load_box.h / 2) - pad_size, 
-				load_box.w + pad_size, 
+				(ui_state.width / 2) - (load_box.w / 2) - pad_size,
+				(ui_state.height / 2) - (load_box.h / 2) - pad_size,
+				load_box.w + pad_size,
 				load_box.h + pad_size,
 			}
 
@@ -604,9 +621,9 @@ main :: proc() {
 				cur_x := f64(i %% int(chunk_size))
 				cur_y := f64(i /  int(chunk_size))
 				draw_rect(&rects, Rect{
-					start_x + (cur_x * chunk_size), 
-					start_y + (cur_y * chunk_size), 
-					chunk_size - pad_size, 
+					start_x + (cur_x * chunk_size),
+					start_y + (cur_y * chunk_size),
+					chunk_size - pad_size,
 					chunk_size - pad_size,
 				}, loading_block_color)
 			}
@@ -618,9 +635,6 @@ main :: proc() {
 		defer {
 			trace.stats.released_event = {-1, -1, -1, -1}
 		}
-
-		ui_state.height = height
-		ui_state.width  = width
 
 		spall_x_pad     := 3 * em
 		header_height   := 3 * em
@@ -649,7 +663,7 @@ main :: proc() {
 		ui_state.global_timebar_rect     = Rect{0, header_height, ui_state.width, timebar_height}
 		ui_state.global_activity_rect    = Rect{spall_x_pad, header_height + timebar_height, flamegraph_width, activity_height}
 		ui_state.local_timebar_rect      = Rect{spall_x_pad, header_height + timebar_height + activity_height, flamegraph_width, timebar_height}
-		ui_state.minimap_rect            = Rect{width - minigraph_width, topbars_height, minigraph_width, flamegraph_height}
+		ui_state.minimap_rect            = Rect{ui_state.width - minigraph_width, topbars_height, minigraph_width, flamegraph_height}
 
 		ui_state.info_pane_rect          = Rect{0, ui_state.height - ui_state.info_pane_height, ui_state.width, ui_state.info_pane_height}
 		ui_state.tab_rect                = Rect{0, ui_state.info_pane_rect.y, ui_state.width, tab_select_height}
@@ -694,7 +708,7 @@ main :: proc() {
 		bucket_count = 0
 
 		draw_flamegraphs(&rects, &text_rects, trace, start_time, end_time, &ui_state)
- 
+
 		draw_minimap(&rects, trace, &ui_state)
 		draw_topbars(&rects, trace, start_time, end_time, &ui_state)
 

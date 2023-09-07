@@ -5,12 +5,16 @@ package main
 import "core:strings"
 import NS "vendor:darwin/Foundation"
 
-platform_init :: proc() {
+platform_pre_init :: proc() {
+	velocity_multiplier = -15
+}
+platform_post_init :: proc() {
 	user_defaults := NS.UserDefaults.standardUserDefaults()
 	flag_str := NS.String.alloc()->initWithOdinString("AppleMomentumScrollSupported")
 	user_defaults->setBoolForKey(true, flag_str)
-
-	velocity_multiplier = -15
+}
+platform_get_dpi :: proc() -> f64 {
+	return 0
 }
 
 open_file_dialog :: proc() -> (string, bool) {
