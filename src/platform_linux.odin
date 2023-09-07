@@ -13,8 +13,8 @@ platform_pre_init :: proc() {
 }
 platform_post_init :: proc() { }
 
-platform_get_dpi :: proc() -> f64 {
-	return 0
+platform_dpi_hack :: proc() -> f64 {
+	return -1
 }
 
 open_file_dialog :: proc() -> (string, bool) {

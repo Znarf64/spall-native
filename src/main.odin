@@ -263,9 +263,9 @@ main :: proc() {
 
 	platform_pre_init()
 
-	dpr_attempt := platform_get_dpi()
-	if dpr_attempt > 0 {
-		dpr = dpr_attempt
+	dpi_hack_val := platform_dpi_hack()
+	if dpi_hack_val > 0 {
+		dpr = dpi_hack_val
 		orig_window_width = i32(f64(orig_window_width) * dpr)
 		orig_window_height = i32(f64(orig_window_height) * dpr)
 	}
@@ -332,14 +332,18 @@ main :: proc() {
 	width := f64(pretend_window_width)
 	height := f64(pretend_window_height)
 
+
 	// on certain platforms (windows) we need to grab the DPI explicitly, on certain (mac or linux)
 	// we can infer it from the window size we got vs the window size we asked for (it scales it up
 	// based on DPI).
-	if dpr < 0 {
+	if dpi_hack_val < 0 {
 		dpr_w := f64(real_window_width) / f64(pretend_window_width)
 		dpr_h := f64(real_window_height) / f64(pretend_window_height)
 		dpr = dpr_w
+		width = width * dpr
+		height = height * dpr
 	}
+	fmt.printf("%v, %v\n", width, height)
 
 	lru.init(&lru_text_cache, 1000)
 	lru_text_cache.on_remove = rm_text_cache
@@ -510,12 +514,26 @@ main :: proc() {
 					last_frame_count = frame_count
 				}
 
-				mouse_pos = Vec2{f64(event.motion.x) / dpr, f64(event.motion.y) / dpr}
+				x := f64(event.motion.x)
+				y := f64(event.motion.y)
+				if dpi_hack_val > 0 {
+					x /= dpr
+					y /= dpr
+				}
+
+				mouse_pos = Vec2{x, y}
 			case .MOUSEBUTTONDOWN:
 				switch event.button.button {
 				case SDL.BUTTON_LEFT:
 					is_mouse_down = true
-					mouse_pos = Vec2{f64(event.button.x) / dpr, f64(event.button.y) / dpr}
+
+					x := f64(event.button.x)
+					y := f64(event.button.y)
+					if dpi_hack_val > 0 {
+						x /= dpr
+						y /= dpr
+					}
+					mouse_pos = Vec2{x, y}
 
 					if frame_count != last_frame_count {
 						last_mouse_pos = mouse_pos
@@ -537,7 +555,13 @@ main :: proc() {
 						last_frame_count = frame_count
 					}
 
-					mouse_pos = Vec2{f64(event.button.x) / dpr, f64(event.button.y) / dpr}
+					x := f64(event.button.x)
+					y := f64(event.button.y)
+					if dpi_hack_val > 0 {
+						x /= dpr
+						y /= dpr
+					}
+					mouse_pos = Vec2{x, y}
 				}
 			case .MOUSEWHEEL:
 				y_dist := f64(event.wheel.y) * velocity_multiplier
@@ -550,6 +574,10 @@ main :: proc() {
 				case .RESIZED:
 					width = f64(event.window.data1)
 					height = f64(event.window.data2)
+					if dpi_hack_val < 0 {
+						width *= dpr
+						height *= dpr
+					}
 				}
 			case .DROPFILE:
 				start_trace = strings.clone_from_cstring(event.drop.file)

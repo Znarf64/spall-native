@@ -16,7 +16,7 @@ platform_pre_init :: proc() {
 }
 platform_post_init :: proc() { }
 
-platform_get_dpi :: proc() -> f64 {
+platform_dpi_hack :: proc() -> f64 {
     return f64(GetDpiForSystem()) / 96.0
 }
 
