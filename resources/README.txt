@@ -44,9 +44,40 @@ If you're on Ubuntu, you'll need:
 On OSX:
 `brew install sdl2 sdl2_ttf`
 
+
+What am I looking at?
+--------------------
+Spall has a handful of useful tools, each of which have ups and downs, and examples.
+
+- Manual Tracing
+- Auto Tracing
+- Native Auto Tracing
+
+The Manual Tracer -- spall.h
+---------------------------
+With the manual tracer, you add begin and end logging to functions you want to see timed and graphed, and get out a trace file that you can plop into Spall.
+Manual tracing graphs only the things you want to see, which is great for high-accuracy, clean graphs.
+
+--------------------------------------------------------------------------------------------------------------------
+! Auto-Tracing only officially works with Clang and GCC; The MSVC compiler's auto-instrumentation feature is buggy !
+--------------------------------------------------------------------------------------------------------------------
+
+The Auto-Tracer -- spall.h + examples/auto_tracing
+--------------------------------------------------
+This is built using spall.h. It graphs every function in your code, using clang and gcc auto-instrumentation features.
+The files it spits out are large, but it's fairly flexible, working in places spall_native_auto.h can't be used because it doesn't need access to the binary after profiling.
+
+The Native Auto-Tracer -- spall_native_auto.h + examples/native_auto_tracing
+---------------------------------------------------------------------------
+This one does a little magic. It also graphs every function in your code, using the same auto-instrumentation features, but with dramatically smaller trace sizes and less overhead.
+It reads your binary when you load your trace into Spall to pull symbols and line info out of the PDB and DWARF data.
+It's a little inflexible, it can't auto-trace hot-reloaded code, but for projects like GDB or Python, it's invaluable to be able to dump millions of functions per second
+and get a full picture of how the code runs.
+
+
 How to Use
 ----------
-For info on how to use the UI, check out the gif-scrapbook tutorial for the web-version at https://gravitymoth.com/spall/spall-web.html, the two are pretty similar
+For info on how to use the UI, check out the gif-scrapbook tutorial for the web-version at https://gravitymoth.com/spall/spall-web.html, the web version and the native version are similar
 
-If you're using C/C++, check out the examples folder for usage examples
-If you're using Odin, import `core:prof/spall`, and you should be good to go.
+If you're using C/C++, the examples folder has some usage examples and explainers for how the tools work
+If you're using Odin, check out prof/spall for examples in the Odin docs, import `core:prof/spall`, and you should be good to go.
