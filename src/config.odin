@@ -459,7 +459,7 @@ load_executable :: proc(trace: ^Trace, file_name: string) -> bool {
 			return false
 		}
 
-		_ := load_macho_debug(trace, debug_buffer)
+		load_macho_debug(trace, debug_buffer)
 	} else if bytes.equal(exec_buffer[:2], DOS_MAGIC) {
 		ok := load_pe32(trace, exec_buffer)
 		if !ok {

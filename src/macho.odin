@@ -146,6 +146,11 @@ load_macho_debug :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 		return false
 	}
 
+	abbrev_section := Mach_Section{}
+	info_section   := Mach_Section{}
+	line_section   := Mach_Section{}
+	found_debug := 0
+
 	read_idx := size_of(Mach_Header_64)
 	for read_idx < len(exec_buffer) {
 		current_buffer := exec_buffer[read_idx:]
@@ -158,7 +163,22 @@ load_macho_debug :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 			segment_header := slice_to_type(exec_buffer[read_idx:], Mach_Segment_64_Command) or_return
 			segment_name := strings.string_from_null_terminated_ptr(raw_data(segment_header.name[:]), 16)
 			if segment_name == "__DWARF" {
-				fmt.printf("%#v\n", segment_header)
+
+				sub_idx := read_idx + size_of(Mach_Segment_64_Command)
+				end_idx := read_idx + int(cmd.size)
+				for sub_idx < end_idx {
+					section := slice_to_type(exec_buffer[sub_idx:], Mach_Section) or_return
+					section_name := strings.string_from_null_terminated_ptr(raw_data(section.name[:]), 16)
+
+					switch section_name {
+					case "__debug_abbrev": abbrev_section = section; found_debug += 1
+					case "__debug_info":   info_section   = section; found_debug += 1
+					case "__debug_line":   line_section   = section; found_debug += 1
+					}
+
+					sub_idx += size_of(Mach_Section)
+				}
+				break
 			}
 		}
 
@@ -167,6 +187,11 @@ load_macho_debug :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 	if read_idx >= len(exec_buffer) {
 		return false
 	}
+	if found_debug < 3 {
+		return false
+	}
+
+	// Start parsing DWARF normally from here
 
 	return true
 }
