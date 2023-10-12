@@ -3,6 +3,7 @@ package main
 import "core:os"
 import "core:fmt"
 import "core:strings"
+import "core:slice"
 
 Dw_Form :: enum {
 	addr           = 0x01,
@@ -58,6 +59,25 @@ Dw_LNCT :: enum u8 {
 	md5             = 5,
 }
 
+Dw_LNS :: enum u8 {
+	extended           = 0x0,
+	copy               = 0x1,
+	advance_pc         = 0x2,
+	advance_line       = 0x3,
+	set_file           = 0x4,
+	set_column         = 0x5,
+	negate_stmt        = 0x6,
+	set_basic_block    = 0x7,
+	const_add_pc       = 0x8,
+	fixed_advance_pc   = 0x9,
+	set_prologue_end   = 0xa,
+	set_epilogue_begin = 0xb,
+}
+
+Dw_Line :: enum u8 {
+	end_sequence = 0x1,
+	set_address = 0x2,
+}
 
 DWARF32_V5_Line_Header :: struct #packed {
 	address_size:           u8,
@@ -112,11 +132,6 @@ File_Unit :: struct {
 	dir_idx:    int,
 }
 
-CU_Unit :: struct {
-	dir_table: [dynamic]string,
-	file_table: [dynamic]File_Unit,
-}
-
 Line_Machine :: struct {
 	address:         u64,
 	op_idx:          u32,
@@ -150,6 +165,13 @@ Line_Info :: struct {
 	line_num: u32,
 	col_num:  u32,
 	file_idx: u32,
+}
+
+CU_Unit :: struct {
+	dir_table:    [dynamic]string,
+	file_table:   [dynamic]File_Unit,
+	line_info:    [dynamic]Line_Info,
+	line_table:   Line_Table,
 }
 
 DWARF_Context :: struct {
@@ -237,6 +259,31 @@ read_uleb :: proc(buffer: []u8) -> (u64, int, bool) {
 	return 0, 0, false
 }
 
+read_ileb :: proc(buffer: []u8) -> (i64, int, bool) {
+	val    : i64 = 0
+	offset := 0
+	size   := 1
+
+	for i := 0; i < 8; i += 1 {
+		b := buffer[i]
+
+		val = val | i64(b & 0x7F) << u64(offset * 7)
+		offset += 1
+
+		if b < 128 {
+			if (b & 0x40) == 0x40 {
+				val |= max(i64) << u64(offset * 7)
+			}
+
+			return val, size, true
+		}
+
+		size += 1
+	}
+
+	return 0, 0, false
+}
+
 load_dwarf :: proc(trace: ^Trace, line_buffer, line_str_buffer, abbrev_buffer, info_buffer: []u8) -> bool {
 	cu_list := make([dynamic]CU_Unit)
 
@@ -280,9 +327,10 @@ load_dwarf :: proc(trace: ^Trace, line_buffer, line_str_buffer, abbrev_buffer, i
 		opcode_table_len := line_hdr.opcode_base - 1
 		i += int(opcode_table_len)
 
-		dir_table   := make([dynamic]string)
-		file_table  := make([dynamic]File_Unit)
-		line_tables := make([dynamic]Line_Table)
+		dir_table  := make([dynamic]string)
+		file_table := make([dynamic]File_Unit)
+		line_info  := make([dynamic]Line_Info)
+		lt  := Line_Table{}
 
 		if version == 5 {
 			dir_entry_fmt_count := slice_to_type(line_buffer[i:], u8) or_return
@@ -407,12 +455,12 @@ load_dwarf :: proc(trace: ^Trace, line_buffer, line_str_buffer, abbrev_buffer, i
 			hdr_size := i - cu_start
 			rem_size := int(full_cu_size) - hdr_size
 
-			append(&line_tables, Line_Table{
+			lt = Line_Table{
 				op_buffer   = line_buffer[i:i+rem_size],
 				opcode_base = line_hdr.opcode_base,
 				line_base   = line_hdr.line_base,
 				line_range  = line_hdr.line_range,
-			})
+			}
 			i += rem_size
 
 		} else { // For DWARF 4, 3, 2, etc.
@@ -455,28 +503,140 @@ load_dwarf :: proc(trace: ^Trace, line_buffer, line_str_buffer, abbrev_buffer, i
 			hdr_size := i - cu_start
 			rem_size := int(full_cu_size) - hdr_size
 
-			append(&line_tables, Line_Table{
+			lt = Line_Table{
 				op_buffer   = line_buffer[i:i+rem_size],
 				opcode_base = line_hdr.opcode_base,
 				line_base   = line_hdr.line_base,
 				line_range  = line_hdr.line_range,
-			})
+			}
 			i += rem_size
 		}
 
-		append(&cu_list, CU_Unit{dir_table, file_table})
+		append(&cu_list, CU_Unit{dir_table, file_table, line_info, lt})
 	}
 
-	for cu, idx in cu_list {
-		fmt.printf("CU %d\n", idx)
-		base_path := cu.dir_table[0]
-		for file in cu.file_table {
-			dir_path := cu.dir_table[file.dir_idx]
-			if dir_path[0] != '/' {
-				fmt.printf("%s/%s/%s\n", base_path, cu.dir_table[file.dir_idx], file.name)
-			} else {
-				fmt.printf("%s/%s\n", cu.dir_table[file.dir_idx], file.name)
+	for cu in &cu_list {
+		line_table := &cu.line_table
+
+		lm_state := Line_Machine{}
+		lm_state.file_idx = 1
+		lm_state.line_num = 1
+		lm_state.is_stmt = line_table.default_is_stmt
+
+		lines := make([dynamic]Line_Machine)
+		for i := 0; i < len(line_table.op_buffer); {
+			op_byte := line_table.op_buffer[i]
+			i += 1
+
+			if op_byte >= line_table.opcode_base {
+				real_op := op_byte - line_table.opcode_base
+				line_inc := int(line_table.line_base + i8(real_op % line_table.line_range))
+				addr_inc := int(real_op / line_table.line_range)
+
+				lm_state.line_num = u32(int(lm_state.line_num) + line_inc)
+				lm_state.address  = u64(int(lm_state.address) + addr_inc)
+
+				append(&lines, lm_state)
+
+				lm_state.discriminator  = 0
+				lm_state.basic_block    = false
+				lm_state.prologue_end   = false
+				lm_state.epilogue_begin = false
+
+				continue
 			}
+
+			op := Dw_LNS(op_byte)
+			if op == .extended {
+				i += 1
+				tmp := line_table.op_buffer[i]
+				real_op := Dw_Line(tmp)
+				i += 1
+
+				#partial switch real_op {
+					case .end_sequence: {
+						lm_state.end_sequence = true
+						append(&lines, lm_state)
+					} case .set_address: {
+						address := slice_to_type(line_table.op_buffer[i:], u64)
+						lm_state.address = address
+						i += size_of(address)
+					} case: {
+						fmt.printf("Unsupport op: %v\n", real_op)
+					}
+				}
+
+				continue
+			}
+
+			#partial switch op {
+				case .copy: {
+					append(&lines, lm_state)
+
+					lm_state.discriminator  = 0
+					lm_state.basic_block    = false
+					lm_state.prologue_end   = false
+					lm_state.epilogue_begin = false
+				} case .advance_pc: {
+					addr_inc, size := read_uleb(line_table.op_buffer[i:]) or_return
+					lm_state.address = lm_state.address + u64(addr_inc)
+					i += size
+				} case .advance_line: {
+					line_inc, size := read_ileb(line_table.op_buffer[i:]) or_return
+					lm_state.line_num = u32(int(lm_state.line_num) + int(line_inc))
+					i += size
+				} case .set_file: {
+					file_idx, size := read_uleb(line_table.op_buffer[i:]) or_return
+					lm_state.file_idx = u32(file_idx)
+					i += size
+				} case .set_column: {
+					col_num, size := read_uleb(line_table.op_buffer[i:]) or_return
+					lm_state.col_num = u32(col_num)
+					i += size
+				} case .negate_stmt: {
+					lm_state.is_stmt = !lm_state.is_stmt
+				} case .set_basic_block: {
+					lm_state.basic_block = true
+				} case .const_add_pc: {
+					addr_inc := (255 - line_table.opcode_base) / line_table.line_range
+					lm_state.address += u64(addr_inc)
+				} case .fixed_advance_pc: {
+					advance := slice_to_type(line_table.op_buffer[i:], u16)
+					lm_state.address += u64(advance)
+					i += size_of(advance)
+				} case .set_epilogue_begin: {
+					lm_state.epilogue_begin = true
+				} case .set_prologue_end: {
+					lm_state.prologue_end = true
+				} case: {
+					fmt.printf("Unsupported op %v\n", op)
+					return false
+				}
+			}
+
+			line_table.lines = lines[:]
+		}
+	}
+
+	for cu in &cu_list {
+		for line in &cu.line_table.lines {
+			li := Line_Info{}
+			li.address = line.address
+			li.is_func_frame_start = line.prologue_end
+			li.is_func_frame_end   = line.epilogue_begin
+			li.line_num            = line.line_num
+			li.col_num             = line.col_num
+			li.file_idx            = line.file_idx
+			append(&cu.line_info, li)
+		}
+
+		line_order :: proc(a, b: Line_Info) -> bool {
+			return a.address < b.address
+		}
+		slice.sort_by(cu.line_info[:], line_order)
+
+		for line in cu.line_info {
+			fmt.printf("0x%x -- %s:%d\n", line.address, cu.file_table[line.file_idx].name, line.line_num)
 		}
 	}
 
