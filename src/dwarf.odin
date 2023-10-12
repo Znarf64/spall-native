@@ -242,6 +242,8 @@ load_dwarf :: proc(trace: ^Trace, line_buffer, line_str_buffer, abbrev_buffer, i
 	for i := 0; i < len(line_buffer); pass += 1{
 		fmt.printf("pass %v\n", pass)
 
+		cu_start := i
+
 		unit_length := slice_to_type(line_buffer[i:], u32) or_return
 		if unit_length == 0xFFFF_FFFF { 
 			fmt.printf("Only supporting DWARF32 for now!\n")
@@ -395,11 +397,9 @@ load_dwarf :: proc(trace: ^Trace, line_buffer, line_str_buffer, abbrev_buffer, i
 				append(&file_table, file)
 			}
 
-			/*
 			full_cu_size := unit_length + size_of(unit_length)
-			hdr_size := size_of(unit_length) + size_of(version) + int(line_hdr.header_length) + size_of(u32)
+			hdr_size := i - cu_start
 			rem_size := int(full_cu_size) - hdr_size
-			fmt.printf("rem size: %v\n", rem_size)
 
 			append(&line_tables, Line_Table{
 				op_buffer   = line_buffer[i:i+rem_size],
@@ -408,10 +408,6 @@ load_dwarf :: proc(trace: ^Trace, line_buffer, line_str_buffer, abbrev_buffer, i
 				line_range  = line_hdr.line_range,
 			})
 			i += rem_size
-			*/
-
-			fmt.printf("TODO: need to skip to end of CU\n")
-			os.exit(0)
 
 		} else { // For DWARF 4, 3, 2, etc.
 			for {
@@ -447,12 +443,10 @@ load_dwarf :: proc(trace: ^Trace, line_buffer, line_str_buffer, abbrev_buffer, i
 
 				file_name := strings.clone_from_cstring(cstr_file_name)
 				append(&file_table, File_Unit{name = file_name, dir_idx = int(dir_idx)})
-
-				fmt.printf("- file %s | %d\n", file_name, dir_idx)
 			}
 
 			full_cu_size := unit_length + size_of(unit_length)
-			hdr_size := size_of(unit_length) + size_of(version) + int(line_hdr.header_length) + size_of(u32)
+			hdr_size := i - cu_start
 			rem_size := int(full_cu_size) - hdr_size
 
 			append(&line_tables, Line_Table{
@@ -465,8 +459,11 @@ load_dwarf :: proc(trace: ^Trace, line_buffer, line_str_buffer, abbrev_buffer, i
 		}
 	}
 
-	if true { os.exit(0) }
+	for file in file_table {
+		fmt.printf("%d | %s\n", file.dir_idx, file.name)
+	}
 
+	fmt.printf("success?\n")
 	return false
 }
 
