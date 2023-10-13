@@ -237,6 +237,12 @@ Stats :: struct {
 	released_event:  EventID,
 }
 
+Line_Info :: struct {
+	address:  u64,
+	file_idx: u32,
+	line_num: u32,
+}
+
 COLOR_CHOICES :: 16
 Trace :: struct {
 	file_name: string,
@@ -253,6 +259,9 @@ Trace :: struct {
 	processes: [dynamic]Process,
 	process_map: ValHash,
 	global_instants: [dynamic]Instant,
+
+	filename_map: strings.Intern,
+	line_info: [dynamic]Line_Info,
 
 	total_max_time: i64,
 	total_min_time: i64,

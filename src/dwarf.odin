@@ -159,19 +159,9 @@ Line_Table :: struct {
 	lines: []Line_Machine,
 }
 
-Line_Info :: struct {
-	address:  u64,
-	is_func_frame_start: bool,
-	is_func_frame_end:   bool,
-	line_num: u32,
-	col_num:  u32,
-	file_idx: u32,
-}
-
 CU_Unit :: struct {
 	dir_table:    [dynamic]string,
 	file_table:   [dynamic]File_Unit,
-	line_info:    [dynamic]Line_Info,
 	line_table:   Line_Table,
 }
 
@@ -288,11 +278,8 @@ read_ileb :: proc(buffer: []u8) -> (i64, int, bool) {
 load_dwarf :: proc(trace: ^Trace, line_buffer, line_str_buffer, abbrev_buffer, info_buffer: []u8) -> bool {
 	cu_list := make([dynamic]CU_Unit)
 
-	pass := 1
 	version : u16 = 0
-	for i := 0; i < len(line_buffer); pass += 1 {
-		fmt.printf("pass %v\n", pass)
-
+	for i := 0; i < len(line_buffer); {
 		cu_start := i
 
 		unit_length := slice_to_type(line_buffer[i:], u32) or_return
@@ -317,9 +304,6 @@ load_dwarf :: proc(trace: ^Trace, line_buffer, line_str_buffer, abbrev_buffer, i
 		line_hdr, size := parse_line_header(&ctx, line_buffer[i:]) or_return
 		i += size
 
-		fmt.printf("parsing DWARF %v\n", version)
-		fmt.printf("line header: %#v\n", line_hdr)
-
 		if line_hdr.opcode_base != 13 {
 			fmt.printf("Unable to support custom line table ops!\n")
 			return false
@@ -331,7 +315,6 @@ load_dwarf :: proc(trace: ^Trace, line_buffer, line_str_buffer, abbrev_buffer, i
 
 		dir_table  := make([dynamic]string)
 		file_table := make([dynamic]File_Unit)
-		line_info  := make([dynamic]Line_Info)
 		lt  := Line_Table{}
 
 		if version == 5 {
@@ -514,7 +497,7 @@ load_dwarf :: proc(trace: ^Trace, line_buffer, line_str_buffer, abbrev_buffer, i
 			i += rem_size
 		}
 
-		append(&cu_list, CU_Unit{dir_table, file_table, line_info, lt})
+		append(&cu_list, CU_Unit{dir_table, file_table, lt})
 	}
 
 	for cu in &cu_list {
@@ -625,27 +608,48 @@ load_dwarf :: proc(trace: ^Trace, line_buffer, line_str_buffer, abbrev_buffer, i
 		}
 	}
 
-	for cu in &cu_list {
+	strings.intern_init(&trace.filename_map)
+	for cu, c_idx in &cu_list {
+		base_dir := cu.dir_table[0]
+		for file, f_idx in cu.file_table {
+			dir_name := cu.dir_table[file.dir_idx]
+
+			file_name := ""
+			if dir_name[0] != '/' {
+				file_name = fmt.tprintf("%s/%s/%s", base_dir, dir_name, file.name)
+			} else {
+				file_name = fmt.tprintf("%s/%s", dir_name, file.name)
+			}
+
+			interned_name, err := strings.intern_get(&trace.filename_map, file_name)
+			if err != nil {
+				return false
+			}
+
+			trace.cu_file_map[CU_File_Entry{u32(c_idx), u32(f_idx)}] = interned_name
+		}
+	}
+
+	for cu, c_idx in &cu_list {
 		for line in &cu.line_table.lines {
-			li := Line_Info{}
-			li.address = line.address
-			li.is_func_frame_start = line.prologue_end
-			li.is_func_frame_end   = line.epilogue_begin
-			li.line_num            = line.line_num
-			li.col_num             = line.col_num
-			li.file_idx            = line.file_idx
-			append(&cu.line_info, li)
+			name, ok := trace.cu_file_map[CU_File_Entry{u32(c_idx), line.file_idx}]
+			if !ok {
+				name = ""
+			}
+			append(&trace.line_info, Line_Info{line.address, line.line_num, name})
 		}
 
 		line_order :: proc(a, b: Line_Info) -> bool {
 			return a.address < b.address
 		}
-		slice.sort_by(cu.line_info[:], line_order)
-
-		for line in cu.line_info {
-			fmt.printf("0x%x -- %s:%d\n", line.address, cu.file_table[line.file_idx].name, line.line_num)
-		}
+		slice.sort_by(trace.line_info[:], line_order)
 	}
+
+/*
+	for line in trace.line_info {
+		fmt.printf("0%x -- %s:%d\n", line.address, line.file_name, line.line_num)
+	}
+*/
 
 	fmt.printf("success?\n")
 	return false
