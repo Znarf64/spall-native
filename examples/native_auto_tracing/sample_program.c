@@ -10,11 +10,11 @@
 */
 #include "../../spall_native_auto.h"
 
-void bar(void) { }
-void foo(void) {
+static void bar(void) { }
+static void foo(void) {
 	bar();
 }
-void wub() {
+static void wub() {
 	printf("Foobar is terrible\n");
 }
 

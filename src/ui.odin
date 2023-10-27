@@ -473,10 +473,10 @@ draw_rect_tooltip :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^U
 		file, line, ok := get_line_info(trace, ev.id)
 		if ok {
 			line_info = fmt.tprintf("%s:%d", file, line)
+			info_width := measure_text(line_info, .PSize, .DefaultFont)
+			rect_width = max(rect_width, info_width + em)
+			next_line(&rect_height, em)
 		}
-		info_width := measure_text(line_info, .PSize, .DefaultFont)
-		rect_width = max(rect_width, info_width + em)
-		next_line(&rect_height, em)
 	}
 
 	args := ""
@@ -1399,7 +1399,6 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 			draw_text(rects, fmt.tprintf(" user data: %s", args_str), Vec2{stats_pane_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 		}
 		if ev.has_addr {
-			draw_text(rects, fmt.tprintf(" address: 0x%x", ev.id), Vec2{stats_pane_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 			file, line, ok := get_line_info(trace, ev.id)
 			if ok {
 				draw_text(rects, fmt.tprintf(" location: %s:%d", file, line), Vec2{stats_pane_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)

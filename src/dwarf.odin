@@ -775,7 +775,7 @@ load_dwarf :: proc(trace: ^Trace, sections: ^Sections, skew_size: u64) -> bool {
 					#partial switch def_block.content {
 						case .path: {
 							if def_block.form != .line_strp {
-								fmt.printf("Unhandled line parser type! %v\n", def_block.form)
+								fmt.printf("Unhandled path form! %v\n", def_block.form)
 								return false
 							}
 
@@ -839,7 +839,7 @@ load_dwarf :: proc(trace: ^Trace, sections: ^Sections, skew_size: u64) -> bool {
 					#partial switch def_block.content {
 						case .path: {
 							if def_block.form != .line_strp {
-								fmt.printf("Unhandled line parser type! %v\n", def_block.form)
+								fmt.printf("Unhandled path form! %v\n", def_block.form)
 								return false
 							}
 
@@ -880,6 +880,13 @@ load_dwarf :: proc(trace: ^Trace, sections: ^Sections, skew_size: u64) -> bool {
 									return false
 								}
 							}
+						} case .md5: {
+							md5, ok := slice_to_type(sections.line[i:], [16]u8)
+							if !ok {
+								panic("%s\n", #location())
+							}
+
+							i += size_of(md5)
 						} case: {
 							fmt.printf("Unhandled line parser type! %v\n", def_block.content)
 							return false
