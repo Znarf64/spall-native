@@ -95,8 +95,6 @@ random_seed     : u64
 
 // loading / trace state
 start_trace := ""
-loading_config := false
-post_loading := true
 
 // gl-rect nonsense
 idx_pos := [?]glm.vec2{
@@ -198,6 +196,7 @@ grab_static_fonts :: proc(font_buffers: [][]u8, sizes: []f64) -> []^SDL_TTF.Font
 ThreadFileLoadState :: struct {
 	filename: string,
 	trace: ^Trace,
+	ui_state: ^UIState,
 }
 
 threaded_config_load :: proc(pool: ^Pool, data: rawptr) {
@@ -205,6 +204,7 @@ threaded_config_load :: proc(pool: ^Pool, data: rawptr) {
 
 	trace := state.trace
 	filename := state.filename
+	ui_state := state.ui_state
 	free(state)
 
 	start_time := time.tick_now()
@@ -212,23 +212,24 @@ threaded_config_load :: proc(pool: ^Pool, data: rawptr) {
 	duration := time.tick_since(start_time)
 	fmt.printf("runtime: %f ms, got %s events\n", time.duration_milliseconds(duration), tens_fmt(u64(trace.event_count)))
 
-	loading_config = false
-	post_loading = true
+	ui_state.loading_config = false
+	ui_state.post_loading = true
 }
 
-load_config :: proc(pool: ^Pool, trace: ^Trace) -> bool {
-	if loading_config {
+load_config :: proc(pool: ^Pool, trace: ^Trace, ui_state: ^UIState) -> bool {
+	if ui_state.loading_config {
 		return false
 	}
 
 	free_trace(trace)
 	init_trace(trace)
-	loading_config = true
+	ui_state.loading_config = true
 
 	state := new(ThreadFileLoadState)
 	state^ = ThreadFileLoadState{
 		filename = start_trace,
 		trace = trace,
+		ui_state = ui_state,
 	}
 	start_trace = ""
 
@@ -257,6 +258,9 @@ main :: proc() {
 		spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "")
 	}
 	clicked_t = time.tick_now()
+	ui_state := UIState{
+		post_loading = true,
+	}
 
 	// If the user passed us a trace, save off the filename now
 	if len(os.args) == 2 {
@@ -274,7 +278,7 @@ main :: proc() {
 			return
 		}
 
-		ok := load_config(&global_pool, trace)
+		ok := load_config(&global_pool, trace, &ui_state)
 		if !ok {
 			return
 		}
@@ -441,7 +445,6 @@ main :: proc() {
 	rects := make([dynamic]DrawRect)
 	text_rects := make([dynamic]TextRect)
 
-	ui_state := UIState{}
 	next_line(&ui_state.line_height, em)
 	ui_state.info_pane_height = ui_state.line_height * 8
 
@@ -615,8 +618,8 @@ main :: proc() {
 		gl.BindBuffer(gl.ARRAY_BUFFER, rect_deets_buffer)
 		gl.BindVertexArray(vao);
 
-		if start_trace != "" && !loading_config {
-			load_config(&global_pool, trace)
+		if start_trace != "" && !ui_state.loading_config {
+			load_config(&global_pool, trace, &ui_state)
 		}
 
 		gl.ClearColor(
@@ -630,7 +633,7 @@ main :: proc() {
 		ui_state.height = height / dpr
 		ui_state.width  = width / dpr
 
-		if loading_config {
+		if ui_state.loading_config {
 			offset := trace.parser.offset
 			size := trace.total_size
 
@@ -718,7 +721,7 @@ main :: proc() {
 		ui_state.padded_flamegraph_rect.y += em
 		ui_state.padded_flamegraph_rect.h -= em
 
-		if post_loading {
+		if ui_state.post_loading {
 			if trace.event_count == 0 { trace.total_min_time = 0; trace.total_max_time = 1000 }
 			ui_state.multiselecting = false
 			reset_flamegraph_camera(trace, &ui_state)
@@ -727,7 +730,7 @@ main :: proc() {
 				name := fmt.ctprintf("%s - spall beta 0.2", trace.base_name)
 				SDL.SetWindowTitle(window, name)
 			}
-			post_loading = false
+			ui_state.post_loading = false
 		}
 
 		// process key/mouse inputs

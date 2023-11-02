@@ -311,7 +311,7 @@ draw_header :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState
 			filename, ok := open_file_dialog()
 			if ok {
 				start_trace = filename
-				load_config(&global_pool, trace)
+				load_config(&global_pool, trace, ui_state)
 			}
 		}
 		cursor_x += button_width + button_pad

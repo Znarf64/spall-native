@@ -59,6 +59,9 @@ UIState :: struct {
 	multiselecting: bool,
 	resizing_pane: bool,
 	filters_open: bool,
+
+	loading_config: bool,
+	post_loading: bool,
 }
 
 DrawRect :: struct #packed {
