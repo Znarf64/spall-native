@@ -2391,7 +2391,7 @@ draw_textbox :: proc(rects: ^[dynamic]DrawRect, pos: Rect, hint_text: string, st
 	draw_rect_outline(rects, pos, 1,  box_outline_color)
 
 	text_x := pos.x + (em / 2)
-	text_y := pos.y + (em / 2)
+	text_y := pos.y + (pos.h / 2) - (p_height / 2)
 
 	cur_str := strings.to_string(state.b)
 	if strings.builder_len(state.b) == 0 {
