@@ -21,10 +21,6 @@ static void wub() {
 	printf("Foobar is terrible\n");
 }
 
-static void woz1() { }
-static void woz2() { }
-static void woz3() { }
-
 void *run_work(void *ptr) {
 	spall_auto_thread_init((uint32_t)(uint64_t)pthread_self(), SPALL_DEFAULT_BUFFER_SIZE);
 
@@ -70,6 +66,9 @@ int main() {
 	for (int i = 0; i < 1000; i++) {
 		foo();
 	}
+
+    // We can explicitly flush the buffer before continuing
+    spall_auto_buffer_flush();
 
 	wub();
 

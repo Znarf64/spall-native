@@ -63,8 +63,8 @@ void spall_auto_thread_quit(void);
 
 bool spall_auto_buffer_begin(const char *name, signed long name_len, const char *args, signed long args_len);
 bool spall_auto_buffer_end(void);
+bool spall_auto_buffer_flush(void);
 
-void spall_auto_set_all_instrumenting(bool on);
 void spall_auto_set_thread_instrumenting(bool on);
 
 #if SPALL_IS_GCC && SPALL_IS_CPP
@@ -553,7 +553,7 @@ SPALL_FN SPALL_FORCEINLINE bool spall__file_write(void *p, size_t n) {
     return true;
 }
 
-SPALL_FN SPALL_FORCEINLINE bool spall_buffer_flush(void) {
+SPALL_NOINSTRUMENT SPALL_FORCEINLINE bool spall_auto_buffer_flush(void) {
     if (!spall_buffer) return false;
 
     size_t data_start = spall_buffer->write_half ? spall_buffer->sub_length : 0;
@@ -584,7 +584,7 @@ SPALL_FN SPALL_FORCEINLINE bool spall_buffer_flush(void) {
 SPALL_FN SPALL_FORCEINLINE bool spall_buffer_micro_begin(uint64_t addr, uint64_t caller) {
     size_t ev_size = sizeof(SpallMicroBeginEventMax);
     if ((spall_buffer->head + ev_size) > spall_buffer->sub_length) {
-        if (!spall_buffer_flush()) {
+        if (!spall_auto_buffer_flush()) {
             return false;
         }
     }
@@ -628,7 +628,7 @@ SPALL_FN SPALL_FORCEINLINE bool spall_buffer_micro_end(void) {
 
     size_t ev_size = sizeof(SpallMicroEndEventMax);
     if ((spall_buffer->head + ev_size) > spall_buffer->sub_length) {
-        if (!spall_buffer_flush()) {
+        if (!spall_auto_buffer_flush()) {
             return false;
         }
     }
@@ -657,7 +657,7 @@ SPALL_FN SPALL_FORCEINLINE bool spall_buffer_micro_end(void) {
 
 SPALL_NOINSTRUMENT SPALL_FORCEINLINE bool spall_auto_buffer_begin(const char *name, signed long name_len, const char *args, signed long args_len) {
     if ((spall_buffer->head + sizeof(SpallAutoBeginEventMax)) > spall_buffer->sub_length) {
-        if (!spall_buffer_flush()) {
+        if (!spall_auto_buffer_flush()) {
             return false;
         }
     }
@@ -687,7 +687,7 @@ SPALL_NOINSTRUMENT SPALL_FORCEINLINE bool spall_auto_buffer_end(void) {
 
     size_t ev_size = sizeof(SpallAutoEndEvent);
     if ((spall_buffer->head + ev_size) > spall_buffer->sub_length) {
-        if (!spall_buffer_flush()) {
+        if (!spall_auto_buffer_flush()) {
             return false;
         }
     }
@@ -718,14 +718,14 @@ SPALL_NOINSTRUMENT SPALL_FORCEINLINE bool (spall_auto_thread_init)(uint32_t thre
     spall_buffer->writer.is_running = true;
     spall_thread_start(spall_buffer);
 
-    spall_buffer_flush();
+    spall_auto_buffer_flush();
     spall_thread_running = true;
     return true;
 }
 
 void (spall_auto_thread_quit)(void) {
     spall_thread_running = false;
-    spall_buffer_flush();
+    spall_auto_buffer_flush();
 
     spall_buffer->writer.is_running = false;
     spall_buffer->writer.ptr = 1;
