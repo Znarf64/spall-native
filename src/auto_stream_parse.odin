@@ -34,16 +34,6 @@ pull_uval :: #force_inline proc(buffer: []u8, size: int) -> u64 {
     return 0
 }
 
-pull_ival :: #force_inline proc(buffer: []u8, size: int) -> i64 {
-    switch size {
-    case 1: return i64(((^i8)(raw_data(buffer)))^)
-    case 2: return i64(((^i16)(raw_data(buffer)))^)
-    case 4: return i64(((^i32)(raw_data(buffer)))^)
-    case 8: return i64(((^i64)(raw_data(buffer)))^)
-    }
-    return 0
-}
-
 as_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, thread: ^Thread, current_time: ^i64, current_addr: ^u64, current_caller: ^u64) -> BinaryState {
 	p := &trace.parser
 
@@ -68,11 +58,11 @@ as_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, threa
             }
 
             dt       := pull_uval(chunk[chunk_pos(p)+i:], int(dt_size));     i += dt_size
-            d_addr   := pull_ival(chunk[chunk_pos(p)+i:], int(addr_size));   i += addr_size
-            d_caller := pull_ival(chunk[chunk_pos(p)+i:], int(caller_size)); i += caller_size
+            d_addr   := pull_uval(chunk[chunk_pos(p)+i:], int(addr_size));   i += addr_size
+            d_caller := pull_uval(chunk[chunk_pos(p)+i:], int(caller_size)); i += caller_size
 
             current_time^ = current_time^ + i64(dt)
-            current_addr^ = current_addr^ + u64(d_addr)
+            current_addr^ = current_addr^ ~ d_addr
 
             id := current_addr^
             timestamp := current_time^

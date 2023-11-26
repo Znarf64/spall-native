@@ -599,12 +599,12 @@ SPALL_FN SPALL_FORCEINLINE bool spall_buffer_micro_begin(uint64_t addr, uint64_t
     }
 
     uint64_t dt       = now    - spall_buffer->previous_ts;
-    uint64_t d_addr   = addr   - spall_buffer->previous_addr;
-    uint64_t d_caller = caller - spall_buffer->previous_caller;
+    uint64_t d_addr   = addr   ^ spall_buffer->previous_addr;
+    uint64_t d_caller = caller ^ spall_buffer->previous_caller;
 
     uint64_t dt_size     = spall_delta_to_size(dt);
-    uint64_t addr_size   = spall_delta_min_size(d_addr);
-    uint64_t caller_size = spall_delta_min_size(d_caller);
+    uint64_t addr_size   = spall_delta_to_size(d_addr);
+    uint64_t caller_size = spall_delta_to_size(d_caller);
 
     // [begin event tag | size of ts | size of addr | size of caller]
     uint8_t type_byte = (0 << 6) | (spall_squash_2[dt_size] << 4) | (spall_squash_2[addr_size] << 2) | spall_squash_2[caller_size];
