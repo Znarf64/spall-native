@@ -142,16 +142,19 @@ as_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, threa
             type := spall_fmt.Auto_Event_Type((0b00_11_00_00 & type_byte) >> 4)
             #partial switch type {
             case .Begin:
-                dt_size := i64(1 << ((0b00_00_11_00 & type_byte) >> 2))
-                min_event_sz := 1 + dt_size + 2 // type byte + dt size + arg length bytes
+                dt_size   := i64(1 << ((0b00_00_11_00 & type_byte) >> 2))
+                name_size := i64(1 << ((0b00_00_00_10 & type_byte) >> 1))
+                arg_size  := i64(1 << (0b00_00_00_01 & type_byte))
+
+                min_event_sz := 1 + dt_size + name_size + arg_size
                 if chunk_pos(p) + min_event_sz > i64(len(chunk)) {
                     return .PartialRead
                 }
                 
                 i : i64 = 1
-                dt := pull_uval(chunk[chunk_pos(p)+i:], int(dt_size)); i += dt_size
-                name_len := pull_uval(chunk[chunk_pos(p)+i:], 1); i += 1
-                args_len := pull_uval(chunk[chunk_pos(p)+i:], 1); i += 1
+                dt := pull_uval(chunk[chunk_pos(p)+i:], int(dt_size));    i += dt_size
+                name_len := pull_uval(chunk[chunk_pos(p)+i:], int(name_size)); i += name_size
+                args_len := pull_uval(chunk[chunk_pos(p)+i:], int(arg_size));  i += arg_size
 
                 event_tail := i64(name_len) + i64(args_len)
                 if (chunk_pos(p) + min_event_sz + event_tail) > i64(len(chunk)) {
@@ -160,7 +163,7 @@ as_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, threa
 
                 name_str := string(data_start[i:i+i64(name_len)]); i += i64(name_len)
                 args_str := string(data_start[i:i+i64(args_len)]); i += i64(args_len)
-                id := in_get(&trace.intern, &trace.string_block, name_str)
+                id   := in_get(&trace.intern, &trace.string_block, name_str)
                 args := in_get(&trace.intern, &trace.string_block, args_str)
 
                 current_time^ = current_time^ + i64(dt)

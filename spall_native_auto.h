@@ -184,15 +184,7 @@ typedef struct SpallMicroEndEventMax {
 typedef struct SpallAutoBeginEvent {
     uint8_t type;
     uint64_t when;
-    uint8_t name_length;
-    uint8_t args_length;
 } SpallAutoBeginEvent;
-
-typedef struct SpallAutoBeginEventMax {
-    SpallAutoBeginEvent event;
-    char name_bytes[255];
-    char args_bytes[255];
-} SpallAutoBeginEventMax;
 
 typedef struct SpallBufferHeader {
     uint32_t size;
@@ -632,13 +624,18 @@ SPALL_FN SPALL_FORCEINLINE bool spall_buffer_micro_end(void) {
 }
 
 SPALL_NOINSTRUMENT SPALL_FORCEINLINE bool spall_auto_buffer_begin(const char *name, signed long name_len, const char *args, signed long args_len) {
-    if ((spall_buffer->head + sizeof(SpallAutoBeginEventMax)) > spall_buffer->sub_length) {
+
+    uint16_t trunc_name_len = (uint16_t)SPALL_MIN(name_len, UINT16_MAX);
+    uint16_t trunc_args_len = (uint16_t)SPALL_MIN(args_len, UINT16_MAX);
+	uint64_t name_len_size = (trunc_name_len > 255) ? 2 : 1;
+	uint64_t args_len_size = (trunc_args_len > 255) ? 2 : 1;
+
+	uint64_t event_tail = trunc_name_len + name_len_size + trunc_args_len + args_len_size;
+    if ((spall_buffer->head + sizeof(SpallAutoBeginEvent) + event_tail) > spall_buffer->sub_length) {
         if (!spall_auto_buffer_flush()) {
             return false;
         }
     }
-    uint8_t trunc_name_len = (uint8_t)SPALL_MIN(name_len, 255);
-    uint8_t trunc_args_len = (uint8_t)SPALL_MIN(args_len, 255);
 
     size_t data_start = spall_buffer->write_half ? spall_buffer->sub_length : 0;
     uint8_t *ev_buffer = (spall_buffer->data + data_start) + spall_buffer->head;
@@ -651,14 +648,15 @@ SPALL_NOINSTRUMENT SPALL_FORCEINLINE bool spall_auto_buffer_begin(const char *na
     uint64_t dt = now - spall_buffer->previous_ts;
     uint64_t dt_size = spall_delta_to_size(dt);
 
-    // [extended tag | begin type | delta size]
-    uint8_t type_byte = (2 << 6) | (SpallAutoEventType_Begin << 4) | (spall_squash_2[dt_size] << 2);
+    // [extended tag | begin type | delta size | field lengths]
+	uint8_t name_args_lens = ((name_len_size >> 1) << 1) | (args_len_size >> 1);
+    uint8_t type_byte = (2 << 6) | (SpallAutoEventType_Begin << 4) | (spall_squash_2[dt_size] << 2) | name_args_lens;
 
     int i = 0;
     *(ev_buffer + i) = type_byte;              i += 1;
     memcpy(ev_buffer + i, &dt, 8);             i += dt_size;
-    memcpy(ev_buffer + i, &trunc_name_len, 1); i += 1;
-    memcpy(ev_buffer + i, &trunc_args_len, 1); i += 1;
+    memcpy(ev_buffer + i, &trunc_name_len, name_len_size); i += name_len_size;
+    memcpy(ev_buffer + i, &trunc_args_len, args_len_size); i += args_len_size;
     memcpy(ev_buffer + i, name, trunc_name_len); i += trunc_name_len;
     memcpy(ev_buffer + i, args, trunc_args_len); i += trunc_args_len;
 
