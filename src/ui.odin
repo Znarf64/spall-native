@@ -1649,7 +1649,6 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 			}
 
 			cursor = stats_pane_x
-
 			total_perc := (f64(stat.total_time) / f64(trace.stats.total_time)) * 100
 
 			total_text := fmt.tprintf("%10s", stat_fmt(disp_time(trace, f64(stat.total_time))))
@@ -1674,14 +1673,18 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 			text_outf(rects, &cursor, y, min_text, text_color2);   cursor += column_gap
 			text_outf(rects, &cursor, y, avg_text, text_color2);   cursor += column_gap
 			text_outf(rects, &cursor, y, max_text, text_color2);   cursor += column_gap
-			text_outf(rects, &cursor, y, count_text, text_color2);   cursor += column_gap
+			text_outf(rects, &cursor, y, count_text, text_color2); cursor += column_gap
 
 			dr := Rect{cursor, y_before, (full_flamegraph_rect.w - cursor - column_gap) * f64(stat.total_time) / full_time, y_after - y_before}
 			cursor += column_gap / 2
 
 			ev := Event{has_addr = entry.key.has_addr, id = entry.key.id}
-			name_str := ev_name(trace, &ev)
-			name_width := measure_text(name_str, .PSize, .MonoFont)
+			orig_str := ev_name(trace, &ev)
+
+			rem_width := ui_state.width - cursor
+			name_str := trunc_string(orig_str, 0, rem_width)
+			name_width := measure_text(orig_str, .PSize, .MonoFont)
+
 			tmp_color := trace.color_choices[name_color_idx(entry.key.id)]
 			draw_rect(rects, dr, BVec4{u8(tmp_color.x), u8(tmp_color.y), u8(tmp_color.z), 255})
 			draw_text(rects, name_str, Vec2{cursor, y_before + (em / 3)}, .PSize, .MonoFont, text_color)
