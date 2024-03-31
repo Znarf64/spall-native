@@ -2,6 +2,7 @@ package main
 
 import "core:fmt"
 import "core:mem"
+import "core:hash"
 import "core:math/rand"
 import "core:math/linalg/glsl"
 
@@ -126,9 +127,11 @@ set_color_mode :: proc(auto: bool, is_dark: bool) {
 
 // color_choices must be power of 2
 name_color_idx :: proc(name_idx: u64) -> u64 {
-	// trying to avoid address-aligned color banding
-	idx := (name_idx >> 8)
-	return idx & u64(COLOR_CHOICES - 1)
+	idx := name_idx
+	k := transmute([]u8)([^]u64)(&idx)[:size_of(idx)]
+
+	ret := #force_inline hash.murmur32(k)
+	return u64(ret) & u64(COLOR_CHOICES - 1)
 }
 
 generate_color_choices :: proc(trace: ^Trace) {
