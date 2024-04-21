@@ -17,6 +17,9 @@ jobs:
           cd odin
           ./build_odin.sh
 
+      - name: Checkout Spall
+        uses: actions/checkout@v4
+        
       - name: Build Spall
         run: |
           ./build.sh release
