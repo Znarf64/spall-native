@@ -3,7 +3,7 @@
 package main
 
 import "core:strings"
-import NS "vendor:darwin/Foundation"
+import NS "core:sys/darwin/Foundation"
 
 platform_pre_init :: proc() {
 	velocity_multiplier = -15
