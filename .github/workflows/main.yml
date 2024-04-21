@@ -34,3 +34,36 @@ jobs:
         with:
           name: linux_artifacts
           path: bin
+
+  build_mac_x86:
+    name: OSX x86 Build and Test
+    runs-on: macos-latest
+    steps:
+      - name: Grab Spall Dependencies
+        run: |
+          brew install sdl2 sdl2_ttf
+    
+      - name: Checkout Spall
+        uses: actions/checkout@v4
+    
+      - name: Checkout Odin
+        uses: actions/checkout@v4
+        with:
+          repository: Odin-lang/odin
+          path: odin
+
+      - name: Build Odin
+        run: |
+          cd odin
+          ./build_odin.sh
+          echo $PWD >> $GITHUB_PATH
+        
+      - name: Build Spall
+        run: |
+          ./build.sh release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v1
+        with:
+          name: osx_artifacts
+          path: bin
