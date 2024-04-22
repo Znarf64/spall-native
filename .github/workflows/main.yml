@@ -152,21 +152,25 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: spall_windows
+          path: spall_windows
 
       - name: Grab Linux artifacts
         uses: actions/download-artifact@v4
         with:
           name: spall_linux
+          path: spall_linux
 
       - name: Grab OSX ARM artifacts
         uses: actions/download-artifact@v4
         with:
           name: spall_osx_arm
-          
+          path: spall_osx_arm          
+
       - name: Grab OSX X86 artifacts
         uses: actions/download-artifact@v4
         with:
           name: spall_osx_x86
+          path: spall_osx_x86
         
       - name: Package artifacts
         run: |
