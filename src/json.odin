@@ -903,7 +903,7 @@ json_parse :: proc (trace: ^Trace, fd: os.Handle) -> bool {
 	}
 
 	// cleanup unfinished events and sample profiles
-	for _, profile in &jp.profiles {
+	for _, &profile in jp.profiles {
 		p_idx, ok1 := vh_find(&trace.process_map, profile.pid)
 		if !ok1 {
 			fmt.printf("finish_loading | invalid end in profile?\n")
@@ -1023,11 +1023,11 @@ json_process_events :: proc(trace: ^Trace) {
 	slice.sort_by(trace.global_instants[:], instant_rendersort_proc)
 
 	// TODO: PORT THIS CHANGE TO WASM
-	for process in &trace.processes {
+	for &process in trace.processes {
 		slice.sort_by(process.threads[:], tid_sort_proc)
 
 		// generate depth mapping
-		for tm in &process.threads {
+		for &tm in process.threads {
 			if len(tm.events) == 0 {
 				continue
 			}

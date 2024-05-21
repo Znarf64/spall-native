@@ -1,6 +1,6 @@
 package main
 
-import "core:intrinsics"
+import "base:intrinsics"
 import "core:mem"
 import "core:math/rand"
 import "core:math"

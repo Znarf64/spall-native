@@ -1,7 +1,7 @@
 package main
 
+import "base:intrinsics"
 import "core:fmt"
-import "core:intrinsics"
 
 /*
 Handy References:

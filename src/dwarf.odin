@@ -994,7 +994,7 @@ load_dwarf :: proc(trace: ^Trace, sections: ^Sections, skew_size: u64) -> bool {
 	}
 
 	fmt.printf("DWARF: processing line info tables\n")
-	for cu, idx in &cu_list {
+	for &cu, idx in cu_list {
 		line_table := &cu.line_table
 
 		lm_state := Line_Machine{}
@@ -1151,8 +1151,8 @@ load_dwarf :: proc(trace: ^Trace, sections: ^Sections, skew_size: u64) -> bool {
 	}
 
 	fmt.printf("DWARF: sorting lines\n")
-	for cu, c_idx in &cu_list {
-		for line in &cu.line_table.lines {
+	for &cu, c_idx in cu_list {
+		for &line in cu.line_table.lines {
 			name, ok := cu_file_map[CU_File_Entry{u64(c_idx), line.file_idx}]
 			if !ok {
 				name = ""

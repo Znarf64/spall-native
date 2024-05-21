@@ -1,12 +1,13 @@
 package main
 
+import "base:intrinsics"
+
 import "core:fmt"
 import "core:strings"
 import "core:slice"
 import "core:mem"
 import "core:os"
 import "core:math"
-import "core:intrinsics"
 import "formats:spall_fmt"
 
 as_get_next_buffer :: proc(trace: ^Trace, chunk: []u8, buffer_header: ^spall_fmt.Buffer_Header) -> BinaryState {
@@ -289,8 +290,8 @@ as_parse :: proc(trace: ^Trace, fd: os.Handle, header_size: i64) -> bool {
 	}
 
 	// cleanup unfinished events
-	for process in &trace.processes {
-		for thread in &process.threads {
+	for &process in trace.processes {
+		for &thread in process.threads {
 			assert(thread.bande_q.len == thread.current_depth)
 			for thread.current_depth > 0 {
 				jev_idx := stack_pop_back(&thread.bande_q)

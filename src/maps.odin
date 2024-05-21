@@ -1,8 +1,8 @@
 package main
 
+import "base:runtime"
 import "core:fmt"
 import "core:hash"
-import "core:runtime"
 import "core:strings"
 import "core:slice"
 
@@ -489,7 +489,7 @@ am_insert :: proc(v: ^AMMap, key: u64, val: u64) {
 }
 
 am_skew :: proc(v: ^AMMap, skew_size: u64) {
-	for entry, _ in &v.entries {
+	for &entry, _ in v.entries {
 		entry.key += skew_size
 	}
 

@@ -1,9 +1,9 @@
 package main
 
+import "base:runtime"
 import "core:container/queue"
 import "core:fmt"
 import "core:math"
-import "core:runtime"
 import "core:slice"
 import "core:strings"
 import "core:unicode/utf8"
@@ -1425,7 +1425,7 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 				}
 				if clicked && pt_in_rect(clicked_pos, checkbox_rect) {
 					proc_v.in_stats = !proc_v.in_stats
-					for thread, _ in &proc_v.threads {
+					for &thread, _ in proc_v.threads {
 						thread.in_stats = proc_v.in_stats
 					}
 					build_selected_ranges(trace, ui_state)

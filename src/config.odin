@@ -1,11 +1,12 @@
 package main
 
+import "base:runtime"
+
 import "core:os"
 import "core:fmt"
 import "core:slice"
 import "core:bytes"
 import "core:time"
-import "core:runtime"
 import "core:path/filepath"
 import "core:mem"
 import "core:strings"
@@ -218,9 +219,9 @@ chunk_events :: proc(trace: ^Trace) {
 	ev_mem_usage := 0
 
 	// using an eytzinger LOD tree for each depth array
-	for proc_v, p_idx in &trace.processes {
-		for tm, t_idx in &proc_v.threads {
-			for depth, d_idx in &tm.depths {
+	for &proc_v, p_idx in trace.processes {
+		for &tm, t_idx in proc_v.threads {
+			for &depth, d_idx in tm.depths {
 				leaf_count := i_round_up(len(depth.events), BUCKET_SIZE) / BUCKET_SIZE
 				depth.leaf_count = leaf_count
 
