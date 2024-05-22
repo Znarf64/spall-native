@@ -600,7 +600,7 @@ main :: proc() {
 						selected_box.cursor = len(selected_box.b.buf)
 					}
 				case .R:
-					if trace.file_name != "" && !capture_text && ctrl_down && !ui_state.loading_config {
+					if trace.file_name != "" && !capture_text && (ctrl_down || super_down) && !ui_state.loading_config {
 						fmt.printf("attempting to load %s\n", trace.file_name)
 						// FIXME(will) it would be nice if this could be a function
 						// but it can't without deeper fixes to the the data flow
