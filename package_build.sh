@@ -4,7 +4,6 @@ mkdir spall_pkg
 cp resources/FiraCode_LICENSE.txt spall_pkg/.
 cp resources/LICENSE.txt          spall_pkg/.
 cp resources/SDL2.dll             spall_pkg/.
-cp resources/SDL2_ttf.dll         spall_pkg/.
 cp resources/demo_trace.json      spall_pkg/.
 cp resources/README.txt           spall_pkg/.
 cp spall_native_auto.h            spall_pkg/.

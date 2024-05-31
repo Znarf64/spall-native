@@ -15,4 +15,3 @@ if "%1"=="release" (
 )
 
 copy resources\SDL2.dll bin\ 2>nul >nul
-copy resources\SDL2_ttf.dll bin\ 2>nul >nul

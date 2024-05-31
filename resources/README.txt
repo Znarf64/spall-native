@@ -39,10 +39,10 @@ demo_trace.json comes courtesy of NeGate, from his Cuik C compiler
 Runtime Dependencies
 --------------------
 If you're on Ubuntu, you'll need:
-`sudo apt install libsdl2-2.0-0 libsdl2-ttf-2.0-0 libc++abi-14-dev`
+`sudo apt install libsdl2-2.0-0 libc++abi-14-dev`
 
 On OSX:
-`brew install sdl2 sdl2_ttf`
+`brew install sdl2`
 
 
 What am I looking at?
