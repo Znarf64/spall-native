@@ -166,10 +166,9 @@ get_text_cache :: proc(str: string, scale: FontSize, font_type: FontType) -> LRU
 		height :i32= 0
 		pen := FVec2 {0, 0}
 		pixel_height := font_size[scale]
-		fmt.printf("pixel height? %v \n", pixel_height)
 		fontinfo := &font_map[font_type]
 
-		sf := stbtt.ScaleForPixelHeight(fontinfo, pixel_height)
+		sf := stbtt.ScaleForMappingEmToPixels(fontinfo, pixel_height)
 		runes := utf8.string_to_runes(str)
 		for ch, i in runes {
 			adv, lsb : i32
@@ -196,15 +195,18 @@ get_text_cache :: proc(str: string, scale: FontSize, font_type: FontType) -> LRU
 			adv, lsb : i32
 			stbtt.GetCodepointHMetrics(fontinfo, ch, &adv, &lsb)
 
+			subpixel := pen.x - math.floor(pen.x)
+
 			ix0, iy0, ix1, iy1 : i32
-			stbtt.GetCodepointBitmapBox(fontinfo, ch, sf, sf, &ix0, &iy0, &ix1, &iy1)
+			stbtt.GetCodepointBitmapBoxSubpixel(fontinfo, ch, sf, sf, subpixel, 0, &ix0, &iy0, &ix1, &iy1)
 			x0, y0, x1, y1:i32
 			stbtt.GetCodepointBox(fontinfo, ch, &x0, &y0, &x1, &y1)
 
-			stbtt.MakeCodepointBitmap(fontinfo, raw_data(font_temp[:]), ix1 - ix0, iy1 - iy0, 256, sf, sf, ch)
+			//stbtt.MakeCodepointBitmap(fontinfo, raw_data(font_temp[:]), ix1 - ix0, iy1 - iy0, 256, sf, sf, ch)
+			stbtt.MakeGlyphBitmapSubpixel(fontinfo, raw_data(font_temp[:]), ix1-ix0, iy1-iy0, 256, sf, sf, subpixel, 0, stbtt.FindGlyphIndex(fontinfo, ch))
 
 			src := IRect { 0, 0, ix1 - ix0, iy1 - iy0 }
-			dst := IRect { cast(i32) (pen.x + cast(f32)(lsb-ix0) * sf) , baseline + iy0, width, height }
+			dst := IRect { cast(i32) (pen.x + cast(f32)(lsb) * sf), baseline + iy0, width, height }
 
 			alpha_blit(dst, src, 256, output, font_temp[:])
 
@@ -249,35 +251,8 @@ measure_text :: proc(str: string, scale: FontSize, font_type: FontType) -> f64 {
 		return 0
 	}
 
-	//text_blob := get_text_cache(str, scale, font_type)
-	//return f64(text_blob.width) / dpr
-
-	width :i32= 0
-	height :i32= 0
-	pen := FVec2 {0, 0}
-	pixel_height := font_size[scale]
-	fontinfo := &font_map[font_type]
-
-	sf := stbtt.ScaleForPixelHeight(fontinfo, pixel_height)
-	runes := utf8.string_to_runes(str, context.temp_allocator)
-	adv : i32
-	lastw : i32
-	for ch, i in runes {
-		lsb : i32
-		stbtt.GetCodepointHMetrics(fontinfo, ch, &adv, &lsb)
-		x0, y0, x1, y1:i32
-		stbtt.GetCodepointBox(fontinfo, ch, &x0, &y0, &x1, &y1)
-		lastw = x1 - x0
-
-		if i < len(runes)-1 {
-			width += stbtt.GetCodepointKernAdvance(fontinfo, ch, runes[i+1])
-		}
-		width += adv 
-	}
-	width -= adv
-	width += lastw
-
-	return cast(f64)(cast(f32)width * sf) / dpr
+	text_blob := get_text_cache(str, scale, font_type)
+	return f64(text_blob.width) / dpr
 }
 
 draw_text :: proc(rects: ^[dynamic]DrawRect, str: string, pos: Vec2, scale: FontSize, font_type: FontType, color: BVec4) {
