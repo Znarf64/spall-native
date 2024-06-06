@@ -129,41 +129,41 @@ mouse_scroll :: proc(y: f64) {
 	scroll_val_y += y_dist
 }
 
-draw_rect :: proc(rects: ^[dynamic]DrawRect, rect: Rect, color: BVec4) {
-	append(rects, DrawRect{FVec4{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}, color, FVec2{-2, 0.0}})
+draw_rect :: proc(gfx: ^GFX_Context, rect: Rect, color: BVec4) {
+	append(&gfx.rects, DrawRect{FVec4{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}, color, FVec2{-2, 0.0}})
 }
 
-draw_line :: proc(rects: ^[dynamic]DrawRect, start, end: Vec2, width: f64, color: BVec4) {
+draw_line :: proc(gfx: ^GFX_Context, start, end: Vec2, width: f64, color: BVec4) {
 	start, end := start, end
 	if start.x > end.x {
 		end, start = start, end
 	}
 
-	append(rects, DrawRect{FVec4{f32(start.x), f32(start.y), f32(end.x), f32(end.y)}, color, FVec2{f32(width), -2}})
+	append(&gfx.rects, DrawRect{FVec4{f32(start.x), f32(start.y), f32(end.x), f32(end.y)}, color, FVec2{f32(width), -2}})
 }
 
-draw_rect_outline :: proc(rects: ^[dynamic]DrawRect, rect: Rect, width: f64, color: BVec4) {
+draw_rect_outline :: proc(gfx: ^GFX_Context, rect: Rect, width: f64, color: BVec4) {
 	x1 := rect.x
 	y1 := rect.y
 	x2 := rect.x + rect.w
 	y2 := rect.y + rect.h
 
-	draw_line(rects, Vec2{x1, y1}, Vec2{x2, y1}, width, color)
-	draw_line(rects, Vec2{x1, y1}, Vec2{x1, y2}, width, color)
-	draw_line(rects, Vec2{x2, y1}, Vec2{x2, y2}, width, color)
-	draw_line(rects, Vec2{x1, y2}, Vec2{x2, y2}, width, color)
+	draw_line(gfx, Vec2{x1, y1}, Vec2{x2, y1}, width, color)
+	draw_line(gfx, Vec2{x1, y1}, Vec2{x1, y2}, width, color)
+	draw_line(gfx, Vec2{x2, y1}, Vec2{x2, y2}, width, color)
+	draw_line(gfx, Vec2{x1, y2}, Vec2{x2, y2}, width, color)
 }
 
-draw_rect_inline :: proc(rects: ^[dynamic]DrawRect, rect: Rect, width: f64, color: BVec4) {
+draw_rect_inline :: proc(gfx: ^GFX_Context, rect: Rect, width: f64, color: BVec4) {
 	x1 := rect.x + width
 	y1 := rect.y + width
 	x2 := rect.x + rect.w - width
 	y2 := rect.y + rect.h - width
 
-	draw_line(rects, Vec2{x1, y1}, Vec2{x2, y1}, width, color)
-	draw_line(rects, Vec2{x1, y1}, Vec2{x1, y2}, width, color)
-	draw_line(rects, Vec2{x2, y1}, Vec2{x2, y2}, width, color)
-	draw_line(rects, Vec2{x1, y2}, Vec2{x2, y2}, width, color)
+	draw_line(gfx, Vec2{x1, y1}, Vec2{x2, y1}, width, color)
+	draw_line(gfx, Vec2{x1, y1}, Vec2{x1, y2}, width, color)
+	draw_line(gfx, Vec2{x2, y1}, Vec2{x2, y2}, width, color)
+	draw_line(gfx, Vec2{x1, y2}, Vec2{x2, y2}, width, color)
 }
 
 get_text_height :: proc(scale: FontSize, font: FontType) -> f64 { 
@@ -297,7 +297,7 @@ measure_text :: proc(str: string, scale: FontSize, font_type: FontType) -> f64 {
 	return f64(text_blob.width) / dpr
 }
 
-draw_text :: proc(rects: ^[dynamic]DrawRect, str: string, pos: Vec2, scale: FontSize, font_type: FontType, color: BVec4) {
+draw_text :: proc(gfx: ^GFX_Context, str: string, pos: Vec2, scale: FontSize, font_type: FontType, color: BVec4) {
 	if len(str) == 0 {
 		return
 	}
@@ -309,17 +309,17 @@ draw_text :: proc(rects: ^[dynamic]DrawRect, str: string, pos: Vec2, scale: Font
 	y_pos := f32(math.round(pos.y))
 	w := f32(f64(text_blob.width) / dpr)
 	h := f32(f64(text_blob.height) / dpr)
-	append(rects, DrawRect{FVec4{x_pos, y_pos, w, h}, color, FVec2{0.0, 0.0}})
-	flush_rects(rects)
+	append(&gfx.rects, DrawRect{FVec4{x_pos, y_pos, w, h}, color, FVec2{0.0, 0.0}})
+	flush_rects(gfx)
 }
-batch_text :: proc(text_rects: ^[dynamic]TextRect, str: string, pos: Vec2, scale: FontSize, font_type: FontType, color: BVec4) {
+batch_text :: proc(gfx: ^GFX_Context, str: string, pos: Vec2, scale: FontSize, font_type: FontType, color: BVec4) {
 	if len(str) == 0 {
 		return
 	}
 
 	x_pos := f32(math.round(pos.x))
 	y_pos := f32(math.round(pos.y))
-	append(text_rects, TextRect{
+	append(&gfx.text_rects, TextRect{
 		str = str,
 		scale = scale,
 		type = font_type,
@@ -328,8 +328,8 @@ batch_text :: proc(text_rects: ^[dynamic]TextRect, str: string, pos: Vec2, scale
 	})
 }
 
-flush_text_batch :: proc(text_rects: ^[dynamic]TextRect) {
-	for rect in text_rects {
+flush_text_batch :: proc(gfx: ^GFX_Context) {
+	for rect in gfx.text_rects {
 		text_blob := get_text_cache(rect.str, rect.scale, rect.type)
 		gl.BindTexture(gl.TEXTURE_2D, text_blob.handle)
 
@@ -340,13 +340,13 @@ flush_text_batch :: proc(text_rects: ^[dynamic]TextRect) {
 		gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, 1)
 	}
 
-	non_zero_resize(text_rects, 0)
+	non_zero_resize(&gfx.text_rects, 0)
 }
 
-flush_rects :: proc(rects: ^[dynamic]DrawRect) {
-	gl.BufferData(gl.ARRAY_BUFFER, len(rects)*size_of(rects[0]), raw_data(rects[:]), gl.DYNAMIC_DRAW)
-	gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, i32(len(rects)))
-	non_zero_resize(rects, 0)
+flush_rects :: proc(gfx: ^GFX_Context) {
+	gl.BufferData(gl.ARRAY_BUFFER, len(gfx.rects)*size_of(gfx.rects[0]), raw_data(gfx.rects[:]), gl.DYNAMIC_DRAW)
+	gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, i32(len(gfx.rects)))
+	non_zero_resize(&gfx.rects, 0)
 }
 
 get_system_color :: proc() -> bool { return false }

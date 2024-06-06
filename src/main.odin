@@ -326,9 +326,6 @@ main :: proc() {
 
 	ch_width = measure_text("a", .PSize, .MonoFont)
 
-	rects := make([dynamic]DrawRect)
-	text_rects := make([dynamic]TextRect)
-
 	next_line(&ui_state.line_height, em)
 	ui_state.info_pane_height = ui_state.line_height * 8
 
@@ -606,17 +603,17 @@ main :: proc() {
 		ui_state.padded_flamegraph_rect.h -= em
 
 		#partial switch ui_state.ui_mode {
-			case .MainMenu: draw_main_menu(&gfx, &rects, trace, &ui_state, dt)
-			case .TraceView: draw_trace(&gfx, &rects, &text_rects, trace, &ui_state, &global_pool, dt)
+			case .MainMenu: draw_main_menu(&gfx, trace, &ui_state, dt)
+			case .TraceView: draw_trace(&gfx, trace, &ui_state, &global_pool, dt)
 		}
 
 		// reset the cursor if we're not over a selectable thing
 		if !is_hovering {
-			reset_cursor()
+			reset_cursor(&gfx)
 		}
 
 		// Phew... Ok, time to dump to the screen
-		flush_rects(&rects)
+		flush_rects(&gfx)
 
 		// save me my battery, plz
 		if should_sleep(&cam, &ui_state) {
@@ -644,9 +641,8 @@ main :: proc() {
 	when GOOD_BOY_MODE {
 		gl.destroy_uniforms(rect_uniforms)
 
-		delete(all_fonts)
-		delete(rects)
-		delete(text_rects)
+		delete(gfx.rects)
+		delete(gfx.text_rects)
 
 		free_trace(trace)
 		free(trace)

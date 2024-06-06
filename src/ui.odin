@@ -38,7 +38,7 @@ prev_line :: proc(y: ^f64, h: f64) -> f64 {
 	return res
 }
 
-tooltip :: proc(rects: ^[dynamic]DrawRect, pos: Vec2, min_x, max_x: f64, text: string) {
+tooltip :: proc(gfx: ^GFX_Context, pos: Vec2, min_x, max_x: f64, text: string) {
 	text_width := measure_text(text, .PSize, .DefaultFont)
 	text_height := get_text_height(.PSize, .DefaultFont)
 
@@ -50,34 +50,34 @@ tooltip :: proc(rects: ^[dynamic]DrawRect, pos: Vec2, min_x, max_x: f64, text: s
 		tooltip_rect.x = min_x
 	}
 
-	draw_rect(rects, tooltip_rect, bg_color)
-	draw_rect_outline(rects, tooltip_rect, 1, line_color)
-	draw_text(rects, text, Vec2{tooltip_rect.x + (em / 2), tooltip_rect.y + (em / 2)}, .PSize, .DefaultFont, text_color)
+	draw_rect(gfx, tooltip_rect, bg_color)
+	draw_rect_outline(gfx, tooltip_rect, 1, line_color)
+	draw_text(gfx, text, Vec2{tooltip_rect.x + (em / 2), tooltip_rect.y + (em / 2)}, .PSize, .DefaultFont, text_color)
 }
 
-button :: proc(rects: ^[dynamic]DrawRect, in_rect: Rect, label_text, tooltip_text: string, font: FontType, min_x, max_x: f64) -> bool {
-	draw_rect(rects, in_rect, toolbar_button_color)
+button :: proc(gfx: ^GFX_Context, in_rect: Rect, label_text, tooltip_text: string, font: FontType, min_x, max_x: f64) -> bool {
+	draw_rect(gfx, in_rect, toolbar_button_color)
 	label_width := measure_text(label_text, .PSize, font)
 	label_height := get_text_height(.PSize, font)
-	draw_text(rects, label_text, 
+	draw_text(gfx, label_text, 
 	Vec2{
 		in_rect.x + (in_rect.w / 2) - (label_width / 2), 
 		in_rect.y + (in_rect.h / 2) - (label_height / 2),
 	}, .PSize, font, toolbar_text_color)
 
 	if pt_in_rect(mouse_pos, in_rect) {
-		set_cursor("pointer")
+		set_cursor(gfx, "pointer")
 		if clicked {
 			return true
 		} else {
 			tip_pos := Vec2{in_rect.x, in_rect.y + in_rect.h + em}
-			tooltip(rects, tip_pos, min_x, max_x, tooltip_text)
+			tooltip(gfx, tip_pos, min_x, max_x, tooltip_text)
 		}
 	}
 	return false
 }
 
-draw_histogram :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, header: string, stat: ^FunctionStats, pos: Vec2, graph_size: f64) {
+draw_histogram :: proc(gfx: ^GFX_Context, trace: ^Trace, header: string, stat: ^FunctionStats, pos: Vec2, graph_size: f64) {
 	line_width : f64 = 1
 	graph_edge_pad : f64 = 2 * em
 	line_gap := (em / 1.5)
@@ -110,18 +110,18 @@ draw_histogram :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, header: string,
 		rect_tooltip_rect = empty_event
 		rect_tooltip_pos = Vec2{}
 		rendered_rect_tooltip = false
-		reset_cursor()
+		reset_cursor(gfx)
 	}
 
-	draw_rect(rects, graph_overdraw_rect, bg_color)
-	draw_rect(rects, Rect{pos.x, graph_top, graph_size, graph_size}, bg_color2)
-	draw_rect_outline(rects, Rect{pos.x, graph_top, graph_size, graph_size}, 2, outline_color)
+	draw_rect(gfx, graph_overdraw_rect, bg_color)
+	draw_rect(gfx, Rect{pos.x, graph_top, graph_size, graph_size}, bg_color2)
+	draw_rect_outline(gfx, Rect{pos.x, graph_top, graph_size, graph_size}, 2, outline_color)
 
 	header_str := trunc_string(header, (em / 2), graph_size)
 
 	text_render_width := measure_text(header_str, .PSize, .DefaultFont)
 	center_offset := (graph_size / 2) - (text_render_width / 2)
-	draw_text(rects, header_str, Vec2{pos.x + center_offset, pos.y}, .PSize, .MonoFont, text_color)
+	draw_text(gfx, header_str, Vec2{pos.x + center_offset, pos.y}, .PSize, .MonoFont, text_color)
 
 	high_height := graph_top + graph_edge_pad - (em / 2)
 	low_height := graph_bottom - graph_edge_pad - (em / 2)
@@ -143,9 +143,9 @@ draw_histogram :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, header: string,
 			my_write_float(&b, cur_y_val, 0)
 			cur_y_str := strings.to_string(b)
 			cur_y_width := measure_text(cur_y_str, .PSize, .DefaultFont) + line_gap
-			draw_text(rects, cur_y_str, Vec2{(pos.x - 5) - cur_y_width, cur_y_height}, .PSize, .DefaultFont, text_color)
+			draw_text(gfx, cur_y_str, Vec2{(pos.x - 5) - cur_y_width, cur_y_height}, .PSize, .DefaultFont, text_color)
 
-			draw_line(rects, Vec2{pos.x - 5, cur_y_height + (em / 2)}, Vec2{pos.x + 5, cur_y_height + (em / 2)}, 1, graph_color)
+			draw_line(gfx, Vec2{pos.x - 5, cur_y_height + (em / 2)}, Vec2{pos.x + 5, cur_y_height + (em / 2)}, 1, graph_color)
 		}
 
 		x_tac_count := 4
@@ -156,9 +156,9 @@ draw_histogram :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, header: string,
 
 			cur_x_str := stat_fmt(disp_time(trace, cur_x_val))
 			cur_x_width := measure_text(cur_x_str, .PSize, .DefaultFont)
-			draw_text(rects, cur_x_str, Vec2{cur_x_pos - (cur_x_width / 2), graph_bottom + 5}, .PSize, .DefaultFont, text_color)
+			draw_text(gfx, cur_x_str, Vec2{cur_x_pos - (cur_x_width / 2), graph_bottom + 5}, .PSize, .DefaultFont, text_color)
 
-			draw_line(rects, Vec2{cur_x_pos, graph_bottom - 5}, Vec2{cur_x_pos, graph_bottom + 5}, 1, graph_color)
+			draw_line(gfx, Vec2{cur_x_pos, graph_bottom - 5}, Vec2{cur_x_pos, graph_bottom + 5}, 1, graph_color)
 		}
 	}
 
@@ -180,7 +180,7 @@ draw_histogram :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, header: string,
 		point_y := graph_top + graph_size - point_y_offset - graph_edge_pad
 
 		if len(temp_history) > 1  && i > 0 {
-			draw_line(rects, Vec2{last_x, last_y}, Vec2{point_x, point_y}, line_width, graph_color)
+			draw_line(gfx, Vec2{last_x, last_y}, Vec2{point_x, point_y}, line_width, graph_color)
 		}
 
 		last_x = point_x
@@ -189,11 +189,11 @@ draw_histogram :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, header: string,
 
 	if len(temp_history) > 1 {
 		avg_offset := rescale(stat.avg_time, f64(stat.min_time), f64(stat.max_time), near_width, far_width)
-		draw_line(rects, Vec2{avg_offset, graph_top + graph_edge_pad}, Vec2{avg_offset, graph_bottom - graph_edge_pad}, 1, BVec4{255, 0, 0, 255})
+		draw_line(gfx, Vec2{avg_offset, graph_top + graph_edge_pad}, Vec2{avg_offset, graph_bottom - graph_edge_pad}, 1, BVec4{255, 0, 0, 255})
 	}
 }
 
-draw_graph :: proc(rects: ^[dynamic]DrawRect, header: string, history: ^queue.Queue(f64), pos: Vec2) {
+draw_graph :: proc(gfx: ^GFX_Context, header: string, history: ^queue.Queue(f64), pos: Vec2) {
 	line_width : f64 = 1
 	graph_edge_pad : f64 = 2 * em
 	line_gap := (em / 1.5)
@@ -213,14 +213,14 @@ draw_graph :: proc(rects: ^[dynamic]DrawRect, header: string, history: ^queue.Qu
 
 	text_width := measure_text(header, .PSize, .DefaultFont)
 	center_offset := (graph_size / 2) - (text_width / 2)
-	draw_text(rects, header, Vec2{pos.x + center_offset, pos.y}, .PSize, .DefaultFont, text_color)
+	draw_text(gfx, header, Vec2{pos.x + center_offset, pos.y}, .PSize, .DefaultFont, text_color)
 
 	graph_top := pos.y + em + line_gap
-	draw_rect(rects, Rect{pos.x, graph_top, graph_size, graph_size}, bg_color2)
-	draw_rect_outline(rects, Rect{pos.x, graph_top, graph_size, graph_size}, 2, outline_color)
+	draw_rect(gfx, Rect{pos.x, graph_top, graph_size, graph_size}, bg_color2)
+	draw_rect_outline(gfx, Rect{pos.x, graph_top, graph_size, graph_size}, 2, outline_color)
 
-	draw_line(rects, Vec2{pos.x - 5, graph_top + graph_size - graph_edge_pad}, Vec2{pos.x + 5, graph_top + graph_size - graph_edge_pad}, 1, graph_color)
-	draw_line(rects, Vec2{pos.x - 5, graph_top + graph_edge_pad}, Vec2{pos.x + 5, graph_top + graph_edge_pad}, 1, graph_color)
+	draw_line(gfx, Vec2{pos.x - 5, graph_top + graph_size - graph_edge_pad}, Vec2{pos.x + 5, graph_top + graph_size - graph_edge_pad}, 1, graph_color)
+	draw_line(gfx, Vec2{pos.x - 5, graph_top + graph_edge_pad}, Vec2{pos.x + 5, graph_top + graph_edge_pad}, 1, graph_color)
 
 	if queue.len(history^) > 1 {
 		buf: [384]byte
@@ -234,17 +234,17 @@ draw_graph :: proc(rects: ^[dynamic]DrawRect, header: string, history: ^queue.Qu
 		my_write_float(&b, max_val, 3)
 		high_str := strings.to_string(b)
 		high_width := measure_text(high_str, .PSize, .DefaultFont) + line_gap
-		draw_text(rects, high_str, Vec2{(pos.x - 5) - high_width, high_height}, .PSize, .DefaultFont, text_color)
+		draw_text(gfx, high_str, Vec2{(pos.x - 5) - high_width, high_height}, .PSize, .DefaultFont, text_color)
 
 		if queue.len(history^) > 90 {
-			draw_line(rects, Vec2{pos.x - 5, avg_height + (em / 2)}, Vec2{pos.x + 5, avg_height + (em / 2)}, 1, graph_color)
+			draw_line(gfx, Vec2{pos.x - 5, avg_height + (em / 2)}, Vec2{pos.x + 5, avg_height + (em / 2)}, 1, graph_color)
 
 			strings.builder_reset(&b)
 			my_write_float(&b, avg_val, 3)
 			avg_str := strings.to_string(b)
 
 			avg_width := measure_text(avg_str, .PSize, .DefaultFont) + line_gap
-			draw_text(rects, avg_str, Vec2{(pos.x - 5) - avg_width, avg_height}, .PSize, .DefaultFont, text_color)
+			draw_text(gfx, avg_str, Vec2{(pos.x - 5) - avg_width, avg_height}, .PSize, .DefaultFont, text_color)
 		}
 
 		strings.builder_reset(&b)
@@ -252,7 +252,7 @@ draw_graph :: proc(rects: ^[dynamic]DrawRect, header: string, history: ^queue.Qu
 		low_str := strings.to_string(b)
 
 		low_width := measure_text(low_str, .PSize, .DefaultFont) + line_gap
-		draw_text(rects, low_str, Vec2{(pos.x - 5) - low_width, low_height}, .PSize, .DefaultFont, text_color)
+		draw_text(gfx, low_str, Vec2{(pos.x - 5) - low_width, low_height}, .PSize, .DefaultFont, text_color)
 	}
 
 	graph_y_bounds := graph_size - (graph_edge_pad * 2)
@@ -277,7 +277,7 @@ draw_graph :: proc(rects: ^[dynamic]DrawRect, header: string, history: ^queue.Qu
 		point_y := graph_top + graph_size - point_y_offset - graph_edge_pad
 
 		if queue.len(history^) > 1  && i > 0 {
-			draw_line(rects, Vec2{last_x, last_y}, Vec2{point_x, point_y}, line_width, graph_color)
+			draw_line(gfx, Vec2{last_x, last_y}, Vec2{point_x, point_y}, line_width, graph_color)
 		}
 
 		last_x = point_x
@@ -285,12 +285,12 @@ draw_graph :: proc(rects: ^[dynamic]DrawRect, header: string, history: ^queue.Qu
 	}
 }
 
-draw_reduced_header :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState) {
+draw_reduced_header :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 	header_rect := ui_state.header_rect
 	full_flamegraph_rect := ui_state.full_flamegraph_rect
 
 	// Render toolbar background
-	draw_rect(rects, header_rect, toolbar_color)
+	draw_rect(gfx, header_rect, toolbar_color)
 
 	// draw toolbar
 	{
@@ -304,11 +304,11 @@ draw_reduced_header :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: 
 		// Draw Logo
 		logo_text := "spall"
 		logo_width := measure_text(logo_text, .H1Size, .DefaultFont)
-		draw_text(rects, logo_text, Vec2{cursor_x, (header_rect.h / 2) - (h1_height / 2)}, .H1Size, .DefaultFont, toolbar_text_color)
+		draw_text(gfx, logo_text, Vec2{cursor_x, (header_rect.h / 2) - (h1_height / 2)}, .H1Size, .DefaultFont, toolbar_text_color)
 		cursor_x += logo_width + edge_pad
 
 		// Open File
-		if button(rects, Rect{cursor_x, (header_rect.h / 2) - (button_height / 2), button_width, button_height}, "\uf07c", "open file", .IconFont, 0, ui_state.width) {
+		if button(gfx, Rect{cursor_x, (header_rect.h / 2) - (button_height / 2), button_width, button_height}, "\uf07c", "open file", .IconFont, 0, ui_state.width) {
 			filename, ok := open_file_dialog()
 			if ok {
 				ui_state.ui_mode = .TraceView
@@ -320,7 +320,7 @@ draw_reduced_header :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: 
 
 		file_name_width := measure_text(trace.base_name, .H1Size, .DefaultFont)
 		name_x := max((full_flamegraph_rect.w / 2) - (file_name_width / 2), cursor_x)
-		draw_text(rects, trace.base_name, Vec2{name_x, (header_rect.h / 2) - (h1_height / 2)}, .H1Size, .DefaultFont, toolbar_text_color)
+		draw_text(gfx, trace.base_name, Vec2{name_x, (header_rect.h / 2) - (h1_height / 2)}, .H1Size, .DefaultFont, toolbar_text_color)
 
 		// colormode button nonsense
 		color_text : string
@@ -337,7 +337,7 @@ draw_reduced_header :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: 
 			color_text = "\uf111"
 		}
 
-		if button(rects, Rect{
+		if button(gfx, Rect{
 			ui_state.width - edge_pad - button_width, 
 			(header_rect.h / 2) - (button_height / 2), 
 			button_width,
@@ -372,12 +372,12 @@ draw_reduced_header :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: 
 	}
 }
 
-draw_header :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState) {
+draw_header :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 	header_rect := ui_state.header_rect
 	full_flamegraph_rect := ui_state.full_flamegraph_rect
 
 	// Render toolbar background
-	draw_rect(rects, header_rect, toolbar_color)
+	draw_rect(gfx, header_rect, toolbar_color)
 
 	// draw toolbar
 	{
@@ -391,11 +391,11 @@ draw_header :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState
 		// Draw Logo
 		logo_text := "spall"
 		logo_width := measure_text(logo_text, .H1Size, .DefaultFont)
-		draw_text(rects, logo_text, Vec2{cursor_x, (header_rect.h / 2) - (h1_height / 2)}, .H1Size, .DefaultFont, toolbar_text_color)
+		draw_text(gfx, logo_text, Vec2{cursor_x, (header_rect.h / 2) - (h1_height / 2)}, .H1Size, .DefaultFont, toolbar_text_color)
 		cursor_x += logo_width + edge_pad
 
 		// Open File
-		if button(rects, Rect{cursor_x, (header_rect.h / 2) - (button_height / 2), button_width, button_height}, "\uf07c", "open file", .IconFont, 0, ui_state.width) {
+		if button(gfx, Rect{cursor_x, (header_rect.h / 2) - (button_height / 2), button_width, button_height}, "\uf07c", "open file", .IconFont, 0, ui_state.width) {
 			filename, ok := open_file_dialog()
 			if ok {
 				start_trace = filename
@@ -405,13 +405,13 @@ draw_header :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState
 		cursor_x += button_width + button_pad
 
 		// Reset Camera
-		if button(rects, Rect{cursor_x, (header_rect.h / 2) - (button_height / 2), button_width, button_height}, "\uf066", "reset camera", .IconFont, 0, ui_state.width) {
+		if button(gfx, Rect{cursor_x, (header_rect.h / 2) - (button_height / 2), button_width, button_height}, "\uf066", "reset camera", .IconFont, 0, ui_state.width) {
 			reset_flamegraph_camera(trace, ui_state)
 		}
 		cursor_x += button_width + button_pad
 
 		// Process All Events
-		if button(rects, Rect{cursor_x, (header_rect.h / 2) - (button_height / 2), button_width, button_height}, "\uf1fe", "get stats for the whole file", .IconFont, 0, ui_state.width) {
+		if button(gfx, Rect{cursor_x, (header_rect.h / 2) - (button_height / 2), button_width, button_height}, "\uf1fe", "get stats for the whole file", .IconFont, 0, ui_state.width) {
 			trace.stats.start_time = 0
 			trace.stats.end_time = f64(trace.total_max_time - trace.total_min_time)
 			ui_state.multiselecting = true
@@ -419,7 +419,7 @@ draw_header :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState
 		}
 		cursor_x += button_width + button_pad
 
-		if button(rects, Rect{cursor_x, (header_rect.h / 2) - (button_height / 2), button_width, button_height}, "\uf0e2", "reload the current trace", .IconFont, 0, ui_state.width) {
+		if button(gfx, Rect{cursor_x, (header_rect.h / 2) - (button_height / 2), button_width, button_height}, "\uf0e2", "reload the current trace", .IconFont, 0, ui_state.width) {
 			// reload the file
 			fmt.printf("attempting to load %s\n", trace.file_name)
 			start_trace = strings.clone(trace.file_name)
@@ -428,7 +428,7 @@ draw_header :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState
 
 		file_name_width := measure_text(trace.base_name, .H1Size, .DefaultFont)
 		name_x := max((full_flamegraph_rect.w / 2) - (file_name_width / 2), cursor_x)
-		draw_text(rects, trace.base_name, Vec2{name_x, (header_rect.h / 2) - (h1_height / 2)}, .H1Size, .DefaultFont, toolbar_text_color)
+		draw_text(gfx, trace.base_name, Vec2{name_x, (header_rect.h / 2) - (h1_height / 2)}, .H1Size, .DefaultFont, toolbar_text_color)
 
 		// colormode button nonsense
 		color_text : string
@@ -445,7 +445,7 @@ draw_header :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState
 			color_text = "\uf111"
 		}
 
-		if button(rects, Rect{
+		if button(gfx, Rect{
 			ui_state.width - edge_pad - button_width, 
 			(header_rect.h / 2) - (button_height / 2), 
 			button_width,
@@ -477,13 +477,13 @@ draw_header :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState
 			}
 			colormode = new_colormode
 		}
-		if button(rects, Rect{ui_state.width - edge_pad - ((button_width * 2) + (button_pad)), (header_rect.h / 2) - (button_height / 2), button_width, button_height}, "\uf188", "toggle debug mode", .IconFont, 0, ui_state.width) {
+		if button(gfx, Rect{ui_state.width - edge_pad - ((button_width * 2) + (button_pad)), (header_rect.h / 2) - (button_height / 2), button_width, button_height}, "\uf188", "toggle debug mode", .IconFont, 0, ui_state.width) {
 			enable_debug = !enable_debug
 		}
 	}
 }
 
-draw_debug :: proc(rects: ^[dynamic]DrawRect, ui_state: ^UIState) {
+draw_debug :: proc(gfx: ^GFX_Context, ui_state: ^UIState) {
 	minimap_rect := ui_state.minimap_rect
 	full_flamegraph_rect := ui_state.full_flamegraph_rect
 	flamegraph_header_height := ui_state.flamegraph_header_height
@@ -493,41 +493,41 @@ draw_debug :: proc(rects: ^[dynamic]DrawRect, ui_state: ^UIState) {
 	x_subpad := em
 
 	y := text_y
-	draw_graph(rects, "FPS", &fps_history, graph_pos)
+	draw_graph(gfx, "FPS", &fps_history, graph_pos)
 
 	hash_str := fmt.tprintf("Build: 0x%X", abs(build_hash))
 	hash_width := measure_text(hash_str, .PSize, .MonoFont)
-	draw_text(rects, hash_str, Vec2{ui_state.width - hash_width - x_subpad, prev_line(&y, em)}, .PSize, .MonoFont, text_color2)
+	draw_text(gfx, hash_str, Vec2{ui_state.width - hash_width - x_subpad, prev_line(&y, em)}, .PSize, .MonoFont, text_color2)
 
 	seed_str := fmt.tprintf("Seed: 0x%X", random_seed)
 	seed_width := measure_text(seed_str, .PSize, .MonoFont)
-	draw_text(rects, seed_str, Vec2{ui_state.width - seed_width - x_subpad, prev_line(&y, em)}, .PSize, .MonoFont, text_color2)
+	draw_text(gfx, seed_str, Vec2{ui_state.width - seed_width - x_subpad, prev_line(&y, em)}, .PSize, .MonoFont, text_color2)
 
 	rects_str := fmt.tprintf("Rect Count: %d", rect_count)
 	rects_txt_width := measure_text(rects_str, .PSize, .MonoFont)
-	draw_text(rects, rects_str, Vec2{ui_state.width - rects_txt_width - x_subpad, prev_line(&y, em)}, .PSize, .MonoFont, text_color2)
+	draw_text(gfx, rects_str, Vec2{ui_state.width - rects_txt_width - x_subpad, prev_line(&y, em)}, .PSize, .MonoFont, text_color2)
 
 	buckets_str := fmt.tprintf("Bucket Count: %d", bucket_count)
 	buckets_txt_width := measure_text(buckets_str, .PSize, .MonoFont)
-	draw_text(rects, buckets_str, Vec2{ui_state.width - buckets_txt_width - x_subpad, prev_line(&y, em)}, .PSize, .MonoFont, text_color2)
+	draw_text(gfx, buckets_str, Vec2{ui_state.width - buckets_txt_width - x_subpad, prev_line(&y, em)}, .PSize, .MonoFont, text_color2)
 
 	events_str := fmt.tprintf("Event Count: %d", rect_count - bucket_count)
 	events_txt_width := measure_text(events_str, .PSize, .MonoFont)
-	draw_text(rects, events_str, Vec2{ui_state.width - events_txt_width - x_subpad, prev_line(&y, em)}, .PSize, .MonoFont, text_color2)
+	draw_text(gfx, events_str, Vec2{ui_state.width - events_txt_width - x_subpad, prev_line(&y, em)}, .PSize, .MonoFont, text_color2)
 
 	cache_hit_str := fmt.tprintf("TTF Cache Hits: %d", cache_hits_this_frame)
 	cache_hit_txt_width := measure_text(cache_hit_str, .PSize, .MonoFont)
-	draw_text(rects, cache_hit_str, Vec2{ui_state.width - cache_hit_txt_width - x_subpad, prev_line(&y, em)}, .PSize, .MonoFont, text_color2)
+	draw_text(gfx, cache_hit_str, Vec2{ui_state.width - cache_hit_txt_width - x_subpad, prev_line(&y, em)}, .PSize, .MonoFont, text_color2)
 
 	cache_miss_str := fmt.tprintf("TTF Cache Misses: %d", cache_misses_this_frame)
 	cache_miss_txt_width := measure_text(cache_miss_str, .PSize, .MonoFont)
-	draw_text(rects, cache_miss_str, Vec2{ui_state.width - cache_miss_txt_width - x_subpad, prev_line(&y, em)}, .PSize, .MonoFont, text_color2)
+	draw_text(gfx, cache_miss_str, Vec2{ui_state.width - cache_miss_txt_width - x_subpad, prev_line(&y, em)}, .PSize, .MonoFont, text_color2)
 
 	cache_hits_this_frame = 0
 	cache_misses_this_frame = 0
 }
 
-draw_rect_tooltip :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState) {
+draw_rect_tooltip :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 	when SELF_TRACE {
 		spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "")
 	}
@@ -593,29 +593,29 @@ draw_rect_tooltip :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^U
 		tooltip_rect.x = min_x
 	}
 
-	draw_rect(rects, tooltip_rect, bg_color)
-	draw_rect_outline(rects, tooltip_rect, 1, line_color)
+	draw_rect(gfx, tooltip_rect, bg_color)
+	draw_rect_outline(gfx, tooltip_rect, 1, line_color)
 	tooltip_start_x := tooltip_rect.x + (em / 2)
 	tooltip_start_y := tooltip_rect.y + (em / 2)
 
 	cursor_x := tooltip_start_x
 	cursor_y := tooltip_start_y
 
-	draw_text(rects, rect_tooltip_stats, Vec2{cursor_x, cursor_y}, .PSize, .DefaultFont, rect_tooltip_stats_color)
+	draw_text(gfx, rect_tooltip_stats, Vec2{cursor_x, cursor_y}, .PSize, .DefaultFont, rect_tooltip_stats_color)
 	cursor_x += (em * 0.35) + stats_width
-	draw_text(rects, rect_tooltip_name, Vec2{cursor_x, cursor_y}, .PSize, .DefaultFont, text_color)
+	draw_text(gfx, rect_tooltip_name, Vec2{cursor_x, cursor_y}, .PSize, .DefaultFont, text_color)
 
 	if len(args) > 0 {
 		next_line(&cursor_y, em)
-		draw_text(rects, args, Vec2{tooltip_start_x, cursor_y}, .PSize, .DefaultFont, text_color)
+		draw_text(gfx, args, Vec2{tooltip_start_x, cursor_y}, .PSize, .DefaultFont, text_color)
 	}
 	if len(line_info) > 0 {
 		next_line(&cursor_y, em)
-		draw_text(rects, line_info, Vec2{tooltip_start_x, cursor_y}, .PSize, .DefaultFont, text_color)
+		draw_text(gfx, line_info, Vec2{tooltip_start_x, cursor_y}, .PSize, .DefaultFont, text_color)
 	}
 }
 
-draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRect, trace: ^Trace, start_time, end_time: i64, ui_state: ^UIState) {
+draw_flamegraphs :: proc(gfx: ^GFX_Context, trace: ^Trace, start_time, end_time: i64, ui_state: ^UIState) {
 	when SELF_TRACE {
 		spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "")
 	}
@@ -667,11 +667,11 @@ draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRe
 			x_off := (scaled_tick_time * cam.current_scale) + cam.pan.x
 			color := (i % subdivisions) != 0 ? subdivision_color : division_color
 
-			draw_line(rects, Vec2{ui_state.side_pad + x_off, line_start}, Vec2{ui_state.side_pad + x_off, line_start + line_height}, 1, BVec4{u8(color.x), u8(color.y), u8(color.z), u8(color.w)})
+			draw_line(gfx, Vec2{ui_state.side_pad + x_off, line_start}, Vec2{ui_state.side_pad + x_off, line_start + line_height}, 1, BVec4{u8(color.x), u8(color.y), u8(color.z), u8(color.w)})
 		}
 
 	}
-	flush_rects(rects)
+	flush_rects(gfx)
 
 	// graph
 	cur_y := padded_flamegraph_rect.y - cam.pan.y
@@ -679,7 +679,7 @@ draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRe
 		h1_size : f64 = 0
 		if len(trace.processes) > 1 {
 			if cur_y > full_flamegraph_rect.y {
-				batch_text(text_rects, get_proc_name(trace, &proc_v), Vec2{ui_state.side_pad + 5, cur_y}, .H1Size, .DefaultFont, text_color)
+				batch_text(gfx, get_proc_name(trace, &proc_v), Vec2{ui_state.side_pad + 5, cur_y}, .H1Size, .DefaultFont, text_color)
 			}
 
 			h1_size = h1_height + (h1_height / 2)
@@ -703,7 +703,7 @@ draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRe
 			}
 
 			if last_cur_y > full_flamegraph_rect.y {
-				batch_text(text_rects, get_thread_name(trace, &thread), Vec2{ui_state.side_pad + 5, last_cur_y}, .H2Size, .DefaultFont, text_color)
+				batch_text(gfx, get_thread_name(trace, &thread), Vec2{ui_state.side_pad + 5, last_cur_y}, .H2Size, .DefaultFont, text_color)
 			}
 
 			cur_depth_off := 0
@@ -773,7 +773,7 @@ draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRe
 							}
 						}
 
-						draw_rect(rects, dr, BVec4{u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255})
+						draw_rect(gfx, dr, BVec4{u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255})
 
 						rect_count += 1
 						bucket_count += 1
@@ -839,7 +839,7 @@ draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRe
 								rect_color.z += 30
 							}
 
-							draw_rect(rects, dr, BVec4{u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255})
+							draw_rect(gfx, dr, BVec4{u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255})
 							rect_count += 1
 
 							underhang := full_flamegraph_rect.x - dr.x
@@ -862,11 +862,11 @@ draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRe
 									name_str = fmt.tprintf("%s…", name_str[:len(name_str)-1])
 								}
 
-								batch_text(text_rects, name_str, Vec2{str_x, dr.y + (ui_state.rect_height / 2) - (em / 2)}, .PSize, .MonoFont, text_color3)
+								batch_text(gfx, name_str, Vec2{str_x, dr.y + (ui_state.rect_height / 2) - (em / 2)}, .PSize, .MonoFont, text_color3)
 							}
 
 							if pt_in_rect(mouse_pos, inner_flamegraph_rect) && pt_in_rect(mouse_pos, dr) {
-								set_cursor("pointer")
+								set_cursor(gfx, "pointer")
 								if !rendered_rect_tooltip && !shift_down {
 									rect_tooltip_pos = Vec2{dr.x, dr.y}
 									rect_tooltip_rect = {i64(p_idx), i64(t_idx), i64(d_idx), i64(e_idx)}
@@ -896,11 +896,11 @@ draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRe
 			cur_y += thread_advance
 		}
 	}
-	flush_rects(rects)
-	flush_text_batch(text_rects)
+	flush_rects(gfx)
+	flush_text_batch(gfx)
 
 	// relative time back-cover
-	draw_rect(rects, Rect{ui_state.side_pad, full_flamegraph_rect.y, full_flamegraph_rect.w, flamegraph_toptext_height}, bg_color)
+	draw_rect(gfx, Rect{ui_state.side_pad, full_flamegraph_rect.y, full_flamegraph_rect.w, flamegraph_toptext_height}, bg_color)
 
 	// draw timestamps for subdivision lines
 	time_high_y := full_flamegraph_rect.y + flamegraph_toptext_height - (2 * em) - (2 * (em / 3))
@@ -931,23 +931,23 @@ draw_flamegraphs :: proc(rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRe
 
 		if draw_top {
 			top_x := ui_state.side_pad + x_off - ((top_text_width + text_side_pad) / 2)
-			draw_rect(rects, Rect{top_x, full_flamegraph_rect.y, top_text_width + text_side_pad, em + (text_side_pad / 2)}, tabbar_color)
-			draw_text(rects, start_str, Vec2{top_x + (text_side_pad / 2), time_high_y - (text_side_pad / 2)}, .PSize, .DefaultFont, text_color)
+			draw_rect(gfx, Rect{top_x, full_flamegraph_rect.y, top_text_width + text_side_pad, em + (text_side_pad / 2)}, tabbar_color)
+			draw_text(gfx, start_str, Vec2{top_x + (text_side_pad / 2), time_high_y - (text_side_pad / 2)}, .PSize, .DefaultFont, text_color)
 		}
-		draw_text(rects, tick_str, Vec2{ui_state.side_pad + x_off - (tick_text_width / 2), time_tick_y}, .PSize, .DefaultFont, text_color)
+		draw_text(gfx, tick_str, Vec2{ui_state.side_pad + x_off - (tick_text_width / 2), time_tick_y}, .PSize, .DefaultFont, text_color)
 	}
 
 	{
 		if len(early_str) > 0 {
 			top_text_width := measure_text(early_str, .PSize, .DefaultFont)
-			draw_rect(rects, Rect{ui_state.side_pad, full_flamegraph_rect.y, top_text_width + text_side_pad, em + (text_side_pad / 2)}, toolbar_color)
-			draw_text(rects, early_str, Vec2{ui_state.side_pad + (text_side_pad / 2), time_high_y - (text_side_pad / 2)}, .PSize, .DefaultFont, toolbar_text_color)
-			draw_line(rects, Vec2{ui_state.side_pad, full_flamegraph_rect.y}, Vec2{ui_state.side_pad, full_flamegraph_rect.y + flamegraph_toptext_height}, 5, toolbar_color)
+			draw_rect(gfx, Rect{ui_state.side_pad, full_flamegraph_rect.y, top_text_width + text_side_pad, em + (text_side_pad / 2)}, toolbar_color)
+			draw_text(gfx, early_str, Vec2{ui_state.side_pad + (text_side_pad / 2), time_high_y - (text_side_pad / 2)}, .PSize, .DefaultFont, toolbar_text_color)
+			draw_line(gfx, Vec2{ui_state.side_pad, full_flamegraph_rect.y}, Vec2{ui_state.side_pad, full_flamegraph_rect.y + flamegraph_toptext_height}, 5, toolbar_color)
 		}
 	}
 }
 
-draw_global_activity :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, highlight_start_x, highlight_end_x: f64, ui_state: ^UIState) {
+draw_global_activity :: proc(gfx: ^GFX_Context, trace: ^Trace, highlight_start_x, highlight_end_x: f64, ui_state: ^UIState) {
 	when SELF_TRACE {
 		spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "")
 	}
@@ -963,7 +963,7 @@ draw_global_activity :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, highlight
 		layer_count += len(proc_v.threads)
 	}
 
-	draw_rect(rects, global_activity_rect, BVec4{u8(wide_bg_color.x), u8(wide_bg_color.y), u8(wide_bg_color.z), u8(wide_bg_color.w)})
+	draw_rect(gfx, global_activity_rect, BVec4{u8(wide_bg_color.x), u8(wide_bg_color.y), u8(wide_bg_color.z), u8(wide_bg_color.w)})
 
 	for &proc_v, p_idx in trace.processes {
 		for &tm, t_idx in proc_v.threads {
@@ -1005,7 +1005,7 @@ draw_global_activity :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, highlight
 					r_x    = max(r_x, 0)
 					r_w   := end_x - r_x
 
-					draw_rect(rects, Rect{r_x, global_activity_rect.y, r_w, global_activity_rect.h}, BVec4{u8(wide_rect_color.x), u8(wide_rect_color.y), u8(wide_rect_color.z), alpha})
+					draw_rect(gfx, Rect{r_x, global_activity_rect.y, r_w, global_activity_rect.h}, BVec4{u8(wide_rect_color.x), u8(wide_rect_color.y), u8(wide_rect_color.z), alpha})
 					continue
 				}
 
@@ -1034,7 +1034,7 @@ draw_global_activity :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, highlight
 						r_x    = max(r_x, 0)
 						r_w   := end_x - r_x
 
-						draw_rect(rects, Rect{r_x, global_activity_rect.y, r_w, global_activity_rect.h}, BVec4{u8(wide_rect_color.x), u8(wide_rect_color.y), u8(wide_rect_color.z), alpha})
+						draw_rect(gfx, Rect{r_x, global_activity_rect.y, r_w, global_activity_rect.h}, BVec4{u8(wide_rect_color.x), u8(wide_rect_color.y), u8(wide_rect_color.z), alpha})
 					}
 					continue
 				}
@@ -1047,16 +1047,16 @@ draw_global_activity :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, highlight
 	}
 
 	highlight_box_l := Rect{ui_state.side_pad, global_activity_rect.y, highlight_start_x, global_activity_rect.h}
-	draw_rect(rects, highlight_box_l, BVec4{0, 0, 0, 150})
+	draw_rect(gfx, highlight_box_l, BVec4{0, 0, 0, 150})
 
 	highlight_box_r := Rect{ui_state.side_pad + highlight_end_x, global_activity_rect.y, full_flamegraph_rect.w - highlight_end_x, global_activity_rect.h}
-	draw_rect(rects, highlight_box_r, BVec4{0, 0, 0, 150})
+	draw_rect(gfx, highlight_box_r, BVec4{0, 0, 0, 150})
 
-	draw_rect(rects, Rect{0, global_activity_rect.y, ui_state.side_pad, global_activity_rect.h}, BVec4{0, 0, 0, 255})
-	draw_rect(rects, Rect{ui_state.width - minimap_rect.w, global_activity_rect.y, minimap_rect.w, global_activity_rect.h}, BVec4{0, 0, 0, 255})
+	draw_rect(gfx, Rect{0, global_activity_rect.y, ui_state.side_pad, global_activity_rect.h}, BVec4{0, 0, 0, 255})
+	draw_rect(gfx, Rect{ui_state.width - minimap_rect.w, global_activity_rect.y, minimap_rect.w, global_activity_rect.h}, BVec4{0, 0, 0, 255})
 }
 
-draw_minimap :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState) {
+draw_minimap :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 	when SELF_TRACE {
 		spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "")
 	}
@@ -1069,7 +1069,7 @@ draw_minimap :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIStat
 	minimap_pad := em
 
 	// draw back-covers
-	draw_rect(rects, minimap_rect, bg_color)
+	draw_rect(gfx, minimap_rect, bg_color)
 
 	mini_rect_height := (em / 2)
 	trace_duration := trace.total_max_time - trace.total_min_time
@@ -1147,7 +1147,7 @@ draw_minimap :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIStat
 							}
 						}
 
-						draw_rect(rects, Rect{r_x, y, r_w, mini_rect_height}, BVec4{u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255})
+						draw_rect(gfx, Rect{r_x, y, r_w, mini_rect_height}, BVec4{u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255})
 						continue
 					}
 
@@ -1191,7 +1191,7 @@ draw_minimap :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIStat
 								}
 							}
 
-							draw_rect(rects, Rect{r_x, y, r_w, mini_rect_height}, BVec4{u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255})
+							draw_rect(gfx, Rect{r_x, y, r_w, mini_rect_height}, BVec4{u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255})
 						}
 						continue
 					}
@@ -1209,14 +1209,14 @@ draw_minimap :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIStat
 	preview_height := full_flamegraph_rect.h * y_scale
 
 	// alpha overlays
-	draw_rect(rects, Rect{minimap_rect.x, full_flamegraph_rect.y, minimap_rect.w, preview_height}, highlight_color)
-	draw_rect(rects, Rect{minimap_rect.x, full_flamegraph_rect.y + preview_height, minimap_rect.w, full_flamegraph_rect.h - preview_height}, shadow_color)
+	draw_rect(gfx, Rect{minimap_rect.x, full_flamegraph_rect.y, minimap_rect.w, preview_height}, highlight_color)
+	draw_rect(gfx, Rect{minimap_rect.x, full_flamegraph_rect.y + preview_height, minimap_rect.w, full_flamegraph_rect.h - preview_height}, shadow_color)
 
 	// top-right cover-chunk
-	draw_rect(rects, Rect{minimap_rect.x, full_flamegraph_rect.y, minimap_rect.w + (minimap_pad * 2), flamegraph_toptext_height}, bg_color)
+	draw_rect(gfx, Rect{minimap_rect.x, full_flamegraph_rect.y, minimap_rect.w + (minimap_pad * 2), flamegraph_toptext_height}, bg_color)
 }
 
-draw_topbars :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, start_time, end_time: i64, ui_state: ^UIState) {
+draw_topbars :: proc(gfx: ^GFX_Context, trace: ^Trace, start_time, end_time: i64, ui_state: ^UIState) {
 	when SELF_TRACE {
 		spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "")
 	}
@@ -1235,10 +1235,10 @@ draw_topbars :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, start_time, end_t
 	trace_duration := disp_time(trace, f64(trace.total_max_time - trace.total_min_time))
 
 	// draw back-covers
-	draw_rect(rects, Rect{0, header_rect.h, ui_state.width, global_activity_rect.h + global_timebar_rect.h}, bg_color) // top
-	draw_rect(rects, Rect{0, header_rect.h, ui_state.side_pad, ui_state.height}, bg_color) // left
+	draw_rect(gfx, Rect{0, header_rect.h, ui_state.width, global_activity_rect.h + global_timebar_rect.h}, bg_color) // top
+	draw_rect(gfx, Rect{0, header_rect.h, ui_state.side_pad, ui_state.height}, bg_color) // left
 
-	draw_line(rects, Vec2{ui_state.side_pad, full_flamegraph_rect.y + flamegraph_toptext_height}, 
+	draw_line(gfx, Vec2{ui_state.side_pad, full_flamegraph_rect.y + flamegraph_toptext_height}, 
 	Vec2{ui_state.width - minimap_rect.w, full_flamegraph_rect.y + flamegraph_toptext_height}, 1, line_color)
 
 	highlight_start_x := rescale(_start_time, 0, trace_duration, 0, full_flamegraph_rect.w)
@@ -1250,7 +1250,7 @@ draw_topbars :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, start_time, end_t
 		highlight_start_x = high_center - (min_highlight / 2)
 		highlight_end_x = high_center + (min_highlight / 2)
 	}
-	draw_global_activity(rects, trace, highlight_start_x, highlight_end_x, ui_state)
+	draw_global_activity(gfx, trace, highlight_start_x, highlight_end_x, ui_state)
 
 	// global timebar
 	{
@@ -1287,7 +1287,7 @@ draw_topbars :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, start_time, end_t
 				time_str := time_fmt(tick_time)
 				text_width := measure_text(time_str, .PSize, .DefaultFont)
 
-				draw_text(rects, time_str, 
+				draw_text(gfx, time_str, 
 				Vec2{
 					ui_state.side_pad + x_off - (text_width / 2),
 					header_rect.h + (global_timebar_rect.h / 2) - (em / 2),
@@ -1297,18 +1297,18 @@ draw_topbars :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, start_time, end_t
 				line_start_y = header_rect.h + (global_timebar_rect.h / 2) - (em / 2) + p_height + (p_height / 6)
 			}
 
-			draw_line(rects,
+			draw_line(gfx,
 			Vec2{ui_state.side_pad + x_off, line_start_y}, 
 			Vec2{ui_state.side_pad + x_off, header_rect.h + global_timebar_rect.h - 2}, 2, division_color)
 		}
 
-		draw_line(rects, 
+		draw_line(gfx, 
 			Vec2{ui_state.side_pad + highlight_start_x, header_rect.h + (global_timebar_rect.h / 2) - (em / 2) + p_height},
 			Vec2{ui_state.side_pad + highlight_start_x, header_rect.h + global_timebar_rect.h + global_activity_rect.h}, 2, xbar_color)
-		draw_line(rects, 
+		draw_line(gfx, 
 			Vec2{ui_state.side_pad + highlight_end_x, header_rect.h + (global_timebar_rect.h / 2) - (em / 2) + p_height}, 
 			Vec2{ui_state.side_pad + highlight_end_x, header_rect.h + global_timebar_rect.h + global_activity_rect.h}, 2, xbar_color)
-		draw_line(rects, 
+		draw_line(gfx, 
 			Vec2{0, header_rect.h + global_timebar_rect.h + global_activity_rect.h}, 
 			Vec2{ui_state.width, header_rect.h + global_timebar_rect.h + global_activity_rect.h}, 1, line_color)
 	}
@@ -1316,7 +1316,7 @@ draw_topbars :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, start_time, end_t
 
 INITIAL_ITER :: 500_000
 FULL_ITER    :: 2_000_000
-draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState) {
+draw_stats :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 	when SELF_TRACE {
 		spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "")
 	}
@@ -1330,13 +1330,13 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 	filter_pane_rect      := ui_state.filter_pane_rect
 
 	// Render info pane back-covers
-	draw_line(rects, Vec2{0, info_pane_rect.y}, Vec2{ui_state.width, info_pane_rect.y}, 1, line_color)
-	draw_rect(rects, info_pane_rect, bg_color) // bottom
+	draw_line(gfx, Vec2{0, info_pane_rect.y}, Vec2{ui_state.width, info_pane_rect.y}, 1, line_color)
+	draw_rect(gfx, info_pane_rect, bg_color) // bottom
 
 
 	pane_start_y := tab_rect.y + tab_rect.h
-	draw_rect(rects, tab_rect, tabbar_color)
-	draw_line(rects, Vec2{0, pane_start_y}, Vec2{ui_state.width, pane_start_y}, 1, line_color)
+	draw_rect(gfx, tab_rect, tabbar_color)
+	draw_line(gfx, Vec2{0, pane_start_y}, Vec2{ui_state.width, pane_start_y}, 1, line_color)
 
 	// draw pane grip
 	handle_text := "\uf00a"
@@ -1346,11 +1346,11 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 	handle_pad := (em / 2)
 	tab_bar_x := (2 * handle_pad) + handle_width
 	tab_handle_rect := Rect{0, info_pane_rect.y, tab_bar_x, tab_rect.h}
-	draw_rect(rects, tab_handle_rect, grip_color)
-	draw_text(rects, handle_text, Vec2{handle_pad, handle_y}, .H2Size, .IconFont, toolbar_text_color)
+	draw_rect(gfx, tab_handle_rect, grip_color)
+	draw_text(gfx, handle_text, Vec2{handle_pad, handle_y}, .H2Size, .IconFont, toolbar_text_color)
 
 	if pt_in_rect(mouse_pos, tab_handle_rect) || ui_state.resizing_pane {
-		set_cursor("pointer")
+		set_cursor(gfx, "pointer")
 	}
 
 	if clicked && pt_in_rect(clicked_pos, tab_handle_rect) {
@@ -1368,10 +1368,10 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 	tab_bar_x += handle_pad
 	filter_text := ui_state.filters_open ? "\uf150" : "\uf152"
 	filter_width := measure_text(filter_text, .H2Size, .IconFont)
-	draw_text(rects, filter_text, Vec2{tab_bar_x, handle_y}, .H2Size, .IconFont, toolbar_text_color)
+	draw_text(gfx, filter_text, Vec2{tab_bar_x, handle_y}, .H2Size, .IconFont, toolbar_text_color)
 	tab_filter_rect := Rect{tab_bar_x, handle_y, filter_width, h2_height}
 	if pt_in_rect(mouse_pos, tab_filter_rect) {
-		set_cursor("pointer")
+		set_cursor(gfx, "pointer")
 	}
 	if clicked && pt_in_rect(clicked_pos, tab_filter_rect) {
 		ui_state.filters_open = !ui_state.filters_open
@@ -1386,9 +1386,9 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 	}
 
 	if ui_state.filters_open {
-		draw_rect(rects, ui_state.filter_pane_rect, tabbar_color)
+		draw_rect(gfx, ui_state.filter_pane_rect, tabbar_color)
 		if pt_in_rect(mouse_pos, ui_state.filter_pane_rect) {
-			reset_cursor()
+			reset_cursor(gfx)
 			is_hovering = false
 			rendered_rect_tooltip = false
 		}
@@ -1426,7 +1426,7 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 				checkbox_rect := Rect{x_offset, y, em, em}
 
 				if pt_in_rect(mouse_pos, checkbox_rect) {
-					set_cursor("pointer")
+					set_cursor(gfx, "pointer")
 				}
 				if clicked && pt_in_rect(clicked_pos, checkbox_rect) {
 					proc_v.in_stats = !proc_v.in_stats
@@ -1436,8 +1436,8 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 					build_selected_ranges(trace, ui_state)
 				}
 
-				draw_text(rects, checkbox_text, Vec2{checkbox_rect.x, checkbox_rect.y}, .PSize, .IconFont, toolbar_text_color)
-				draw_text(rects, get_proc_name(trace, &proc_v), Vec2{x_offset + checkbox_width + checkbox_gap, y - (em / 4)}, .PSize, .DefaultFont, toolbar_text_color)
+				draw_text(gfx, checkbox_text, Vec2{checkbox_rect.x, checkbox_rect.y}, .PSize, .IconFont, toolbar_text_color)
+				draw_text(gfx, get_proc_name(trace, &proc_v), Vec2{x_offset + checkbox_width + checkbox_gap, y - (em / 4)}, .PSize, .DefaultFont, toolbar_text_color)
 			}
 
 
@@ -1453,11 +1453,11 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 				}
 
 				checkbox_rect := Rect{x_offset + thread_pad, y, em, em}
-				draw_text(rects, checkbox_text, Vec2{checkbox_rect.x, checkbox_rect.y}, .PSize, .IconFont, toolbar_text_color)
-				draw_text(rects, get_thread_name(trace, &thread), Vec2{x_offset + thread_pad + checkbox_width + checkbox_gap, y - (em / 4)}, .PSize, .DefaultFont, toolbar_text_color)
+				draw_text(gfx, checkbox_text, Vec2{checkbox_rect.x, checkbox_rect.y}, .PSize, .IconFont, toolbar_text_color)
+				draw_text(gfx, get_thread_name(trace, &thread), Vec2{x_offset + thread_pad + checkbox_width + checkbox_gap, y - (em / 4)}, .PSize, .DefaultFont, toolbar_text_color)
 
 				if pt_in_rect(mouse_pos, checkbox_rect) {
-					set_cursor("pointer")
+					set_cursor(gfx, "pointer")
 				}
 				if clicked && pt_in_rect(clicked_pos, checkbox_rect) {
 					thread.in_stats = !thread.in_stats
@@ -1505,7 +1505,7 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 		}
 
 		text_val := LineVal{y, name}
-		draw_text(rects, trunc_name_str, Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
+		draw_text(gfx, trunc_name_str, Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 
 		args_val := LineVal{-1, ""}
 		if ev.args > 0 {
@@ -1514,7 +1514,7 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 
 			disp_str := fmt.tprintf(" user data: %s", args_str)
 			trunc_disp_str := trunc_string(disp_str, 0, rem_width)
-			draw_text(rects, disp_str, Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
+			draw_text(gfx, disp_str, Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 		}
 
 		loc_val := LineVal{-1, ""}
@@ -1524,27 +1524,27 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 				loc_str := fmt.tprintf("%s:%d", file, line)
 				line_str := fmt.tprintf("  location: %s", loc_str)
 				loc_val = LineVal{y, loc_str}
-				draw_text(rects, line_str, Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
+				draw_text(gfx, line_str, Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 			}
 		}
 
-		draw_text(rects, fmt.tprintf("start time: %s", time_fmt(disp_time(trace, f64(ev.timestamp - trace.total_min_time)))), Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
-		draw_text(rects, fmt.tprintf("  duration: %s", time_fmt(disp_time(trace, f64(bound_duration(&ev, thread.max_time))))), Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
-		draw_text(rects, fmt.tprintf(" self time: %s", time_fmt(disp_time(trace, f64(ev.self_time)))), Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
+		draw_text(gfx, fmt.tprintf("start time: %s", time_fmt(disp_time(trace, f64(ev.timestamp - trace.total_min_time)))), Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
+		draw_text(gfx, fmt.tprintf("  duration: %s", time_fmt(disp_time(trace, f64(bound_duration(&ev, thread.max_time))))), Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
+		draw_text(gfx, fmt.tprintf(" self time: %s", time_fmt(disp_time(trace, f64(ev.self_time)))), Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 
 		if loc_val.y != -1 {
-			if button(rects, Rect{stats_pane_x, loc_val.y, button_height, button_width}, 
+			if button(gfx, Rect{stats_pane_x, loc_val.y, button_height, button_width}, 
 					  "\uf0ea", "Copy Location", .IconFont, 0, ui_state.width) {
 				set_clipboard(loc_val.str)
 			}
 		}
 		if args_val.y != -1 {
-			if button(rects, Rect{stats_pane_x, args_val.y, button_height, button_width}, 
+			if button(gfx, Rect{stats_pane_x, args_val.y, button_height, button_width}, 
 					  "\uf0ea", "Copy Function Extra Data", .IconFont, 0, ui_state.width) {
 				set_clipboard(args_val.str)
 			}
 		}
-		if button(rects, Rect{stats_pane_x, text_val.y, button_height, button_width}, 
+		if button(gfx, Rect{stats_pane_x, text_val.y, button_height, button_width}, 
 				  "\uf0ea", "Copy Function Name", .IconFont, 0, ui_state.width) {
 			set_clipboard(text_val.str)
 		}
@@ -1585,7 +1585,7 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 		cur_y := y + ((ui_state.height - y) / 2) - (max_height / 2)
 		for str in strs {
 			str_width := measure_text(str, .PSize, .DefaultFont)
-			draw_text(rects, str, Vec2{center_x - (str_width / 2), next_line(&cur_y, em)}, .PSize, .DefaultFont, text_color)
+			draw_text(gfx, str, Vec2{center_x - (str_width / 2), next_line(&cur_y, em)}, .PSize, .DefaultFont, text_color)
 		}
 
 		// If stats are ready to display
@@ -1600,9 +1600,9 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 		stats_pane_start := stats_pane_x - x_subpad
 		cursor := stats_pane_x
 
-		text_outf :: proc(rects: ^[dynamic]DrawRect, cursor: ^f64, y: f64, str: string, color := text_color) {
+		text_outf :: proc(gfx: ^GFX_Context, cursor: ^f64, y: f64, str: string, color := text_color) {
 			width := measure_text(str, .PSize, .MonoFont)
-			draw_text(rects, str, Vec2{cursor^, y}, .PSize, .MonoFont, color)
+			draw_text(gfx, str, Vec2{cursor^, y}, .PSize, .MonoFont, color)
 			cursor^ += width
 		}
 
@@ -1647,7 +1647,7 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 
 			click_rect := Rect{stats_pane_start, y_before, ui_state.width, 2 * em}
 			if pt_in_rect(mouse_pos, click_rect) {
-				set_cursor("pointer")
+				set_cursor(gfx, "pointer")
 			}
 
 			if clicked && pt_in_rect(clicked_pos, click_rect) {
@@ -1659,7 +1659,7 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 			}
 
 			if trace.stats.selected_func == entry.key {
-				draw_rect(rects, click_rect, highlight_color)
+				draw_rect(gfx, click_rect, highlight_color)
 			}
 
 			cursor = stats_pane_x
@@ -1674,20 +1674,20 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 			max_text   := fmt.tprintf("%10s", stat_fmt(disp_time(trace, f64(stat.max_time))))
 			count_text := fmt.tprintf("%10s", fmt.tprintf("%d", stat.count))
 
-			text_outf(rects, &cursor, y, self_text, text_color2);   cursor += column_gap
+			text_outf(gfx, &cursor, y, self_text, text_color2);   cursor += column_gap
 			{
 				full_perc_width := measure_text(total_perc_text, .PSize, .MonoFont)
 				perc_width := (ch_width * 6) - full_perc_width
 
-				text_outf(rects, &cursor, y, total_text, text_color2); cursor += ch_width
+				text_outf(gfx, &cursor, y, total_text, text_color2); cursor += ch_width
 				cursor += perc_width
-				draw_text(rects, total_perc_text, Vec2{cursor, y}, .PSize, .MonoFont, text_color2); cursor += column_gap + full_perc_width
+				draw_text(gfx, total_perc_text, Vec2{cursor, y}, .PSize, .MonoFont, text_color2); cursor += column_gap + full_perc_width
 			}
 
-			text_outf(rects, &cursor, y, min_text, text_color2);   cursor += column_gap
-			text_outf(rects, &cursor, y, avg_text, text_color2);   cursor += column_gap
-			text_outf(rects, &cursor, y, max_text, text_color2);   cursor += column_gap
-			text_outf(rects, &cursor, y, count_text, text_color2); cursor += column_gap
+			text_outf(gfx, &cursor, y, min_text, text_color2);   cursor += column_gap
+			text_outf(gfx, &cursor, y, avg_text, text_color2);   cursor += column_gap
+			text_outf(gfx, &cursor, y, max_text, text_color2);   cursor += column_gap
+			text_outf(gfx, &cursor, y, count_text, text_color2); cursor += column_gap
 
 			dr := Rect{cursor, y_before, (full_flamegraph_rect.w - cursor - column_gap) * f64(stat.total_time) / full_time, y_after - y_before}
 			cursor += column_gap / 2
@@ -1700,8 +1700,8 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 			name_width := measure_text(orig_str, .PSize, .MonoFont)
 
 			tmp_color := trace.color_choices[name_color_idx(entry.key.id)]
-			draw_rect(rects, dr, BVec4{u8(tmp_color.x), u8(tmp_color.y), u8(tmp_color.z), 255})
-			draw_text(rects, name_str, Vec2{cursor, y_before + (em / 3)}, .PSize, .MonoFont, text_color)
+			draw_rect(gfx, dr, BVec4{u8(tmp_color.x), u8(tmp_color.y), u8(tmp_color.z), 255})
+			draw_text(gfx, name_str, Vec2{cursor, y_before + (em / 3)}, .PSize, .MonoFont, text_color)
 
 			next_line(&y, em)
 		}
@@ -1719,7 +1719,7 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 			name_str := ev_name(trace, &ev)
 			stat, ok := sm_get(&trace.stats.stat_map, trace.stats.selected_func)
 			if ok {
-				draw_histogram(rects, trace, name_str, stat, pos, histogram_height)
+				draw_histogram(gfx, trace, name_str, stat, pos, histogram_height)
 			}
 		}
 
@@ -1727,15 +1727,15 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 		cursor = stats_pane_x - x_subpad
 
 		table_header_height := 2 * em
-		draw_rect(rects, Rect{cursor, pane_start_y, ui_state.width, table_header_height + ui_state.top_line_gap}, subbar_color)
-		draw_line(rects, Vec2{cursor, pane_start_y}, Vec2{ui_state.width, pane_start_y}, 1, line_color)
+		draw_rect(gfx, Rect{cursor, pane_start_y, ui_state.width, table_header_height + ui_state.top_line_gap}, subbar_color)
+		draw_line(gfx, Vec2{cursor, pane_start_y}, Vec2{ui_state.width, pane_start_y}, 1, line_color)
 
-		column_header :: proc(rects: ^[dynamic]DrawRect, cursor: ^f64, column_gap, text_y, rect_y, pane_h: f64, text: string, sort_type: SortState) {
+		column_header :: proc(gfx: ^GFX_Context, cursor: ^f64, column_gap, text_y, rect_y, pane_h: f64, text: string, sort_type: SortState) {
 			start_x := cursor^
 			cursor^ += (column_gap / 2)
 
 			width := measure_text(text, .PSize, .MonoFont)
-			draw_text(rects, text, Vec2{cursor^, text_y}, .PSize, .MonoFont, text_color)
+			draw_text(gfx, text, Vec2{cursor^, text_y}, .PSize, .MonoFont, text_color)
 			cursor^ += width + (column_gap / 2)
 			end_x := cursor^
 
@@ -1743,14 +1743,14 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 				arrow_icon := stat_sort_descending ? "\uf0dd" : "\uf0de"
 				arrow_height := get_text_height(.PSize, .IconFont)
 				arrow_width := measure_text(arrow_icon, .PSize, .IconFont)
-				draw_text(rects, arrow_icon, Vec2{end_x - arrow_width - (column_gap / 2), rect_y + (em) - (arrow_height / 2)}, .PSize, .IconFont, text_color)
+				draw_text(gfx, arrow_icon, Vec2{end_x - arrow_width - (column_gap / 2), rect_y + (em) - (arrow_height / 2)}, .PSize, .IconFont, text_color)
 			}
 
-			draw_line(rects, Vec2{cursor^, rect_y}, Vec2{cursor^, rect_y + pane_h}, 1, subbar_split_color)
+			draw_line(gfx, Vec2{cursor^, rect_y}, Vec2{cursor^, rect_y + pane_h}, 1, subbar_split_color)
 
 			click_rect := Rect{start_x, rect_y, end_x - start_x, 2 * em}
 			if pt_in_rect(mouse_pos, click_rect) {
-				set_cursor("pointer")
+				set_cursor(gfx, "pointer")
 			}
 
 			if clicked && pt_in_rect(clicked_pos, click_rect) {
@@ -1765,34 +1765,34 @@ draw_stats :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState)
 		}
 
 		self_header_text   := fmt.tprintf("%-10s", "   self")
-		column_header(rects, &cursor, column_gap, y, pane_start_y, info_pane_rect.h, self_header_text, .SelfTime)
+		column_header(gfx, &cursor, column_gap, y, pane_start_y, info_pane_rect.h, self_header_text, .SelfTime)
 
 		total_header_text  := fmt.tprintf("%-17s", "      total")
-		column_header(rects, &cursor, column_gap, y, pane_start_y, info_pane_rect.h, total_header_text, .TotalTime)
+		column_header(gfx, &cursor, column_gap, y, pane_start_y, info_pane_rect.h, total_header_text, .TotalTime)
 
 		min_header_text    := fmt.tprintf("%-10s", "   min.")
-		column_header(rects, &cursor, column_gap, y, pane_start_y, info_pane_rect.h, min_header_text, .MinTime)
+		column_header(gfx, &cursor, column_gap, y, pane_start_y, info_pane_rect.h, min_header_text, .MinTime)
 
 		avg_header_text    := fmt.tprintf("%-10s", "   avg.")
-		column_header(rects, &cursor, column_gap, y, pane_start_y, info_pane_rect.h, avg_header_text, .AvgTime)
+		column_header(gfx, &cursor, column_gap, y, pane_start_y, info_pane_rect.h, avg_header_text, .AvgTime)
 
 		max_header_text    := fmt.tprintf("%-10s", "   max.")
-		column_header(rects, &cursor, column_gap, y, pane_start_y, info_pane_rect.h, max_header_text, .MaxTime)
+		column_header(gfx, &cursor, column_gap, y, pane_start_y, info_pane_rect.h, max_header_text, .MaxTime)
 
 		max_count_text    := fmt.tprintf("%-10s", "   count")
-		column_header(rects, &cursor, column_gap, y, pane_start_y, info_pane_rect.h, max_count_text, .Count)
+		column_header(gfx, &cursor, column_gap, y, pane_start_y, info_pane_rect.h, max_count_text, .Count)
 
 		name_header_text   := fmt.tprintf("%-10s", "   name")
-		text_outf(rects, &cursor, y, name_header_text, text_color)
+		text_outf(gfx, &cursor, y, name_header_text, text_color)
 	} else if info_pane_rect.h > ((ui_state.line_height * 2) + (ui_state.top_line_gap * 2)) {
 		y := (info_pane_rect.y + info_pane_rect.h) - (ui_state.top_line_gap * 3)
 
-		draw_text(rects, "Shift-click and drag to get stats for multiple rectangles", Vec2{stats_pane_x, prev_line(&y, em)}, .PSize, .DefaultFont, text_color)
-		draw_text(rects, "Click on a rectangle to inspect", Vec2{stats_pane_x, prev_line(&y, em)}, .PSize, .DefaultFont, text_color)
+		draw_text(gfx, "Shift-click and drag to get stats for multiple rectangles", Vec2{stats_pane_x, prev_line(&y, em)}, .PSize, .DefaultFont, text_color)
+		draw_text(gfx, "Click on a rectangle to inspect", Vec2{stats_pane_x, prev_line(&y, em)}, .PSize, .DefaultFont, text_color)
 	}
 }
 
-process_multiselect :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, pan_delta: Vec2, dt: f64, ui_state: ^UIState) {
+process_multiselect :: proc(gfx: ^GFX_Context, trace: ^Trace, pan_delta: Vec2, dt: f64, ui_state: ^UIState) {
 	when SELF_TRACE {
 		spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "")
 	}
@@ -1844,12 +1844,12 @@ process_multiselect :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, pan_delta:
 			x2 := selected_rect.x + selected_rect.w - 1
 			y2 := selected_rect.y + selected_rect.h - 1
 
-			draw_line(rects, Vec2{x1, y1}, Vec2{x1, y2}, 1, multiselect_color)
-			draw_line(rects, Vec2{x2, y1}, Vec2{x2, y2}, 1, multiselect_color)
+			draw_line(gfx, Vec2{x1, y1}, Vec2{x1, y2}, 1, multiselect_color)
+			draw_line(gfx, Vec2{x2, y1}, Vec2{x2, y2}, 1, multiselect_color)
 		}
 
 		multiselect_color.w = 20
-		draw_rect(rects, selected_rect, multiselect_color)
+		draw_rect(gfx, selected_rect, multiselect_color)
 
 		// transform multiselect rect to screen position
 		flopped_rect := Rect{}
@@ -1876,8 +1876,8 @@ process_multiselect :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, pan_delta:
 		text_bg_rect.x = max(text_bg_rect.x, inner_flamegraph_rect.x)
 
 		multiselect_color.w = 180
-		draw_rect(rects, text_bg_rect, multiselect_color)
-		draw_text(rects,
+		draw_rect(gfx, text_bg_rect, multiselect_color)
+		draw_text(gfx,
 			width_text, 
 			Vec2{
 				text_bg_rect.x + (em / 2), 
@@ -2290,7 +2290,7 @@ process_stats :: proc(trace: ^Trace, ui_state: ^UIState) {
 	}
 }
 
-draw_errorbox :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState) {
+draw_errorbox :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 	inner_flamegraph_rect := ui_state.inner_flamegraph_rect
 
 	msg_width := measure_text(trace.error_message, .PSize, .DefaultFont)
@@ -2301,11 +2301,11 @@ draw_errorbox :: proc(rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UISta
 	error_rect.h = min(msg_height + (2 * em),  inner_flamegraph_rect.h)
 	error_rect.x = (inner_flamegraph_rect.x + inner_flamegraph_rect.w) - error_rect.w
 
-	draw_rect(rects, error_rect, error_color)
-	draw_text(rects, trace.error_message, Vec2{(error_rect.x + (error_rect.w / 2)) - (msg_width / 2), (error_rect.y + (error_rect.h / 2)) - (msg_height / 2)}, .PSize, .DefaultFont, text_color)
+	draw_rect(gfx, error_rect, error_color)
+	draw_text(gfx, trace.error_message, Vec2{(error_rect.x + (error_rect.w / 2)) - (msg_width / 2), (error_rect.y + (error_rect.h / 2)) - (msg_height / 2)}, .PSize, .DefaultFont, text_color)
 }
 
-draw_trace :: proc(gfx: ^GFX_Context, rects: ^[dynamic]DrawRect, text_rects: ^[dynamic]TextRect, trace: ^Trace, ui_state: ^UIState, global_pool: ^Pool, dt: f64) {
+draw_trace :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState, global_pool: ^Pool, dt: f64) {
 		rect_tooltip_rect = empty_event
 		rect_tooltip_pos = Vec2{}
 		rendered_rect_tooltip = false
@@ -2344,7 +2344,7 @@ draw_trace :: proc(gfx: ^GFX_Context, rects: ^[dynamic]DrawRect, text_rects: ^[d
 				load_box.h + pad_size,
 			}
 
-			draw_rect(rects, load_box, BVec4{30, 30, 30, 255})
+			draw_rect(gfx, load_box, BVec4{30, 30, 30, 255})
 			chunk_count := int(rescale(f64(offset), 0, f64(size), 0, 100))
 
 			chunk := Rect{0, 0, chunk_size, chunk_size}
@@ -2353,7 +2353,7 @@ draw_trace :: proc(gfx: ^GFX_Context, rects: ^[dynamic]DrawRect, text_rects: ^[d
 			for i := chunk_count; i >= 0; i -= 1 {
 				cur_x := f64(i %% int(chunk_size))
 				cur_y := f64(i /  int(chunk_size))
-				draw_rect(rects, Rect{
+				draw_rect(gfx, Rect{
 					start_x + (cur_x * chunk_size),
 					start_y + (cur_y * chunk_size),
 					chunk_size - pad_size,
@@ -2391,46 +2391,46 @@ draw_trace :: proc(gfx: ^GFX_Context, rects: ^[dynamic]DrawRect, text_rects: ^[d
 		rect_count = 0
 		bucket_count = 0
 
-		draw_flamegraphs(rects, text_rects, trace, start_time, end_time, ui_state)
+		draw_flamegraphs(gfx, trace, start_time, end_time, ui_state)
 
-		draw_minimap(rects, trace, ui_state)
-		draw_topbars(rects, trace, start_time, end_time, ui_state)
+		draw_minimap(gfx, trace, ui_state)
+		draw_topbars(gfx, trace, start_time, end_time, ui_state)
 
 		// draw sidelines
-		draw_line(rects, Vec2{ui_state.side_pad, ui_state.header_rect.h + ui_state.global_timebar_rect.h},       Vec2{ui_state.side_pad, ui_state.info_pane_rect.y}, 1, line_color)
-		draw_line(rects, Vec2{ui_state.minimap_rect.x, ui_state.header_rect.h + ui_state.global_timebar_rect.h}, Vec2{ui_state.minimap_rect.x, ui_state.info_pane_rect.y}, 1, line_color)
+		draw_line(gfx, Vec2{ui_state.side_pad, ui_state.header_rect.h + ui_state.global_timebar_rect.h},       Vec2{ui_state.side_pad, ui_state.info_pane_rect.y}, 1, line_color)
+		draw_line(gfx, Vec2{ui_state.minimap_rect.x, ui_state.header_rect.h + ui_state.global_timebar_rect.h}, Vec2{ui_state.minimap_rect.x, ui_state.info_pane_rect.y}, 1, line_color)
 
-		process_multiselect(rects, trace, pan_delta, dt, ui_state)
+		process_multiselect(gfx, trace, pan_delta, dt, ui_state)
 		process_stats(trace, ui_state)
 
-		draw_stats(rects, trace, ui_state)
+		draw_stats(gfx, trace, ui_state)
 		trace.stats.just_started = false
 		if resort_stats {
 			sort_stats(trace)
 			resort_stats = false
 		}
 
-		draw_header(rects, trace, ui_state)
+		draw_header(gfx, trace, ui_state)
 
 		if enable_debug {
-			draw_debug(rects, ui_state)
+			draw_debug(gfx, ui_state)
 		}
 
 		// if there's a rectangle tooltip to render, now's the time.
 		if rendered_rect_tooltip {
-			draw_rect_tooltip(rects, trace, ui_state)
+			draw_rect_tooltip(gfx, trace, ui_state)
 		}
 
 		if trace.error_message != "" {
-			draw_errorbox(rects, trace, ui_state)
+			draw_errorbox(gfx, trace, ui_state)
 		}
 }
 
-draw_textbox :: proc(rects: ^[dynamic]DrawRect, pos: Rect, hint_text: string, state: ^TextboxState) {
+draw_textbox :: proc(gfx: ^GFX_Context, pos: Rect, hint_text: string, state: ^TextboxState) {
 	p_height  := get_text_height(.PSize, .MonoFont)
 
 	if pt_in_rect(mouse_pos, pos) {
-		set_cursor("text")
+		set_cursor(gfx, "text")
 		if clicked {
 			state.focus = true
 		}
@@ -2438,22 +2438,22 @@ draw_textbox :: proc(rects: ^[dynamic]DrawRect, pos: Rect, hint_text: string, st
 		state.focus = false
 	}
 
-	draw_rect(rects, pos, bg_color)
+	draw_rect(gfx, pos, bg_color)
 
 	box_outline_color := outline_color
 	if state.focus {
 		box_outline_color = toolbar_color
 	}
-	draw_rect_outline(rects, pos, 1,  box_outline_color)
+	draw_rect_outline(gfx, pos, 1,  box_outline_color)
 
 	text_x := pos.x + (em / 2)
 	text_y := pos.y + (pos.h / 2) - (p_height / 2)
 
 	cur_str := strings.to_string(state.b)
 	if strings.builder_len(state.b) == 0 {
-		draw_text(rects, hint_text, Vec2{text_x, text_y}, .PSize, .MonoFont, hint_text_color)
+		draw_text(gfx, hint_text, Vec2{text_x, text_y}, .PSize, .MonoFont, hint_text_color)
 	} else {
-		draw_text(rects, cur_str, Vec2{text_x, text_y}, .PSize, .MonoFont, text_color)
+		draw_text(gfx, cur_str, Vec2{text_x, text_y}, .PSize, .MonoFont, text_color)
 	}
 
 	// Draw cursor
@@ -2467,34 +2467,34 @@ draw_textbox :: proc(rects: ^[dynamic]DrawRect, pos: Rect, hint_text: string, st
 			}
 		}
 		cursor_pos := measure_text(strings.to_string(b), .PSize, .MonoFont)
-		draw_line(rects, Vec2{text_x + cursor_pos, text_y}, Vec2{text_x + cursor_pos, text_y + p_height}, 1, text_color)
+		draw_line(gfx, Vec2{text_x + cursor_pos, text_y}, Vec2{text_x + cursor_pos, text_y + p_height}, 1, text_color)
 	}
 }
 
-draw_main_menu :: proc(gfx: ^GFX_Context, rects: ^[dynamic]DrawRect, trace: ^Trace, ui_state: ^UIState, dt: f64) {
-	draw_reduced_header(rects, trace, ui_state)
+draw_main_menu :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState, dt: f64) {
+	draw_reduced_header(gfx, trace, ui_state)
 
 	menu_rect := Rect{0, ui_state.header_rect.h, ui_state.width, ui_state.height - ui_state.header_rect.h}
-	draw_rect(rects, menu_rect, bg_color)
+	draw_rect(gfx, menu_rect, bg_color)
 
 	p_height  := get_text_height(.PSize, .DefaultFont)
 	h1_height := get_text_height(.H1Size, .DefaultFont)
 
 	line_x := menu_rect.w / 3
 	line_y := (menu_rect.h / 3) + menu_rect.y
-	draw_text(rects, "Run", Vec2{line_x, next_line(&line_y, p_height)}, .H1Size, .DefaultFont, text_color)
-	draw_text(rects, "Launch and sample a program", Vec2{line_x, next_line(&line_y, h1_height)}, .PSize, .DefaultFont, subtext_color)
+	draw_text(gfx, "Run", Vec2{line_x, next_line(&line_y, p_height)}, .H1Size, .DefaultFont, text_color)
+	draw_text(gfx, "Launch and sample a program", Vec2{line_x, next_line(&line_y, h1_height)}, .PSize, .DefaultFont, subtext_color)
 
 	form_w := 30 * em
 	form_h := em + p_height
 	program_input_box := &ui_state.textboxes[.ProgramInput]
-	draw_textbox(rects, Rect{line_x, line_y, form_w, form_h}, "Path to Program...", program_input_box)
+	draw_textbox(gfx, Rect{line_x, line_y, form_w, form_h}, "Path to Program...", program_input_box)
 
 	edge_pad := 1 * em
 	button_height := 2 * em
 	button_width  := 2 * em
 	program_select_rect := Rect{line_x + form_w + edge_pad, next_line(&line_y, form_h), button_height, button_width}
-	if button(rects, program_select_rect, "\uf15b", "select program", .IconFont, menu_rect.x, menu_rect.w) {
+	if button(gfx, program_select_rect, "\uf15b", "select program", .IconFont, menu_rect.x, menu_rect.w) {
 		filename, ok := open_file_dialog()
 		if ok {
 			strings.builder_reset(&program_input_box.b)
@@ -2506,13 +2506,13 @@ draw_main_menu :: proc(gfx: ^GFX_Context, rects: ^[dynamic]DrawRect, trace: ^Tra
 	}
 
 	cmdargs_input_box := &ui_state.textboxes[.CmdArgsInput]
-	draw_textbox(rects, Rect{line_x, next_line(&line_y, form_h), form_w, form_h}, "Command line arguments...", cmdargs_input_box)
+	draw_textbox(gfx, Rect{line_x, next_line(&line_y, form_h), form_w, form_h}, "Command line arguments...", cmdargs_input_box)
 
 	sample_button_text := "Start"
 	sample_button_width := measure_text(sample_button_text, .PSize, .DefaultFont) + em
 	full_form_w := form_w + edge_pad + button_width
 	start_sample_rect := Rect{line_x + (full_form_w / 2) - (sample_button_width / 2), line_y, sample_button_width, p_height + (em / 2)}
-	if button(rects, start_sample_rect, sample_button_text, "", .DefaultFont, menu_rect.x, menu_rect.w) {
+	if button(gfx, start_sample_rect, sample_button_text, "", .DefaultFont, menu_rect.x, menu_rect.w) {
 		fmt.printf("Starting sampling\n")
 	}
 }

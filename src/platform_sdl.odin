@@ -1,4 +1,4 @@
-//+build darwin, windows, linux
+//+build darwin, windows
 package main
 
 import "core:fmt"
@@ -14,6 +14,9 @@ text_cursor:    ^SDL.Cursor
 
 GFX_Context :: struct {
 	window: ^SDL.Window,
+
+	rects:      [dynamic]DrawRect,
+	text_rects: [dynamic]TextRect,
 }
 
 _resolve_key :: proc(code: SDL.Keycode) -> KeyType {
@@ -195,6 +198,8 @@ create_context :: proc(title: cstring, width, height: int) -> (GFX_Context, f64,
 	}
 
 	gfx.window = window
+	gfx.rects = make([dynamic]DrawRect)
+	gfx.text_rects = make([dynamic]TextRect)
 	return gfx, dpr, width, height
 }
 
@@ -310,7 +315,7 @@ set_fullscreen :: proc(gfx: ^GFX_Context, fullscreen: bool) -> (int, int) {
 	return int(iw), int(ih)
 }
 
-set_cursor :: proc(type: string) {
+set_cursor :: proc(gfx: ^GFX_Context, type: string) {
 	switch type {
 	case "auto":    SDL.SetCursor(default_cursor)
 	case "pointer": SDL.SetCursor(pointer_cursor)
@@ -318,8 +323,8 @@ set_cursor :: proc(type: string) {
 	}
 	is_hovering = true
 }
-reset_cursor :: proc() { 
-	set_cursor("auto") 
+reset_cursor :: proc(gfx: ^GFX_Context) { 
+	set_cursor(gfx, "auto") 
 	is_hovering = false
 }
 

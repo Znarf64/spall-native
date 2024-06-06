@@ -7,15 +7,35 @@ import "core:os"
 import "core:fmt"
 import "core:strings"
 import "core:time"
+import "core:strconv"
+import "core:slice"
 
-platform_pre_init :: proc() {
-	velocity_multiplier = -100
-}
-platform_post_init :: proc() { }
+import "vendor:x11/xlib"
+import "vendor:egl"
+import gl "vendor:OpenGL"
 
-platform_dpi_hack :: proc() -> f64 {
-	return -1
+GFX_Context :: struct {
+	x_display: ^xlib.Display,
+	egl_display: egl.Display,
+	root_win: xlib.Window,
+	window: xlib.Window,
+	surface: egl.Surface,
+
+	wm_protos:    xlib.Atom,
+	delete_win:   xlib.Atom,
+	utf8_string:  xlib.Atom,
+	net_wm_state: xlib.Atom,
+	net_wm_state_fullscreen: xlib.Atom,
+	net_wm_name:             xlib.Atom,
+	net_wm_icon_name:        xlib.Atom,
+
+	rects:      [dynamic]DrawRect,
+	text_rects: [dynamic]TextRect,
 }
+
+default_cursor: xlib.Cursor
+pointer_cursor: xlib.Cursor
+text_cursor: xlib.Cursor
 
 open_file_dialog :: proc() -> (string, bool) {
 	buffer := [4096]u8{}
@@ -71,4 +91,414 @@ demangle_symbol :: proc(name: string, tmp_buffer: []u8) -> (string, bool) {
 	}
 
 	return string(ret_str), true
+}
+
+normalize_key :: proc(v: xlib.KeySym) -> KeyType {
+	#partial switch v {
+		case .XK_a: return .A
+		case .XK_b: return .B
+		case .XK_c: return .C
+		case .XK_d: return .D
+		case .XK_e: return .E
+		case .XK_f: return .F
+		case .XK_g: return .G
+		case .XK_h: return .H
+		case .XK_i: return .I
+		case .XK_j: return .J
+		case .XK_k: return .K
+		case .XK_l: return .L
+		case .XK_m: return .M
+		case .XK_n: return .N
+		case .XK_o: return .O
+		case .XK_p: return .P
+		case .XK_q: return .Q
+		case .XK_r: return .R
+		case .XK_s: return .S
+		case .XK_t: return .T
+		case .XK_u: return .U
+		case .XK_v: return .V
+		case .XK_w: return .W
+		case .XK_x: return .X
+		case .XK_y: return .Y
+		case .XK_z: return .Z
+
+		case .XK_0: return ._0
+		case .XK_1: return ._1
+		case .XK_2: return ._2
+		case .XK_3: return ._3
+		case .XK_4: return ._4
+		case .XK_5: return ._5
+		case .XK_6: return ._6
+		case .XK_7: return ._7
+		case .XK_8: return ._8
+		case .XK_9: return ._9
+
+		case .XK_equal: return .Equal
+		case .XK_minus: return .Minus
+		case .XK_bracketright: return .RightBracket
+		case .XK_bracketleft: return .LeftBracket
+		case .XK_leftsinglequotemark: return .Quote
+		case .XK_semicolon:  return .Semicolon
+		case .XK_backslash:  return .Backslash
+		case .XK_comma:      return .Comma
+		case .XK_slash:      return .Slash
+		case .XK_period:     return .Period
+		case .XK_grave:      return .Grave
+		case .XK_Return:     return .Return
+		case .XK_Tab:        return .Tab
+		case .XK_space:      return .Space
+		case .XK_BackSpace:  return .Delete
+		case .XK_Escape:     return .Escape
+		case .XK_Caps_Lock:  return .CapsLock
+		case .XK_function:   return .Function
+
+		case .XK_Super_R:    return .RightSuper
+		case .XK_Super_L:    return .LeftSuper
+		case .XK_Shift_R:    return .RightShift
+		case .XK_Shift_L:    return .LeftShift
+		case .XK_Alt_R:      return .RightAlt
+		case .XK_Alt_L:      return .LeftAlt
+		case .XK_Control_R:  return .RightControl
+		case .XK_Control_L:  return .LeftControl
+
+		case .XK_F1:         return .F1
+		case .XK_F2:         return .F2
+		case .XK_F3:         return .F3
+		case .XK_F4:         return .F4
+		case .XK_F5:         return .F5
+		case .XK_F6:         return .F6
+		case .XK_F7:         return .F7
+		case .XK_F8:         return .F8
+		case .XK_F9:         return .F9
+		case .XK_F10:        return .F10
+		case .XK_F11:        return .F11
+		case .XK_F12:        return .F12
+		case .XK_F13:        return .F13
+		case .XK_F14:        return .F14
+		case .XK_F15:        return .F16
+		case .XK_F16:        return .F16
+		case .XK_F17:        return .F17
+		case .XK_F18:        return .F18
+		case .XK_F19:        return .F19
+		case .XK_F20:        return .F20
+
+		case .XK_Home:      return .Home
+		case .XK_Page_Up:   return .PageUp
+		case .XK_Page_Down: return .PageDown
+		case .XK_Delete:    return .FwdDelete
+		case .XK_End:       return .End
+
+		case .XK_Left:  return .Left
+		case .XK_Right: return .Right
+		case .XK_Down:  return .Down
+		case .XK_Up:    return .Up
+	}
+
+	return .None
+}
+
+_get_dpi :: proc(x_display: ^xlib.Display) -> f32 {
+	rms := xlib.ResourceManagerString(x_display)
+	db := xlib.XrmGetStringDatabase(rms)
+
+	type : cstring
+	value := xlib.XrmValue{}
+	xlib.XrmGetResource(db, "Xft.dpi", "Xft.Dpi", &type, &value)
+
+	dpi_str := string(cstring(value.addr))
+	dpi := f32(strconv.atof(dpi_str))
+
+	return dpi
+}
+
+_create_cursor :: proc(display: ^xlib.Display, name: cstring, theme: cstring, size: i32, fallback: xlib.CursorShape) -> xlib.Cursor {
+
+	if theme != nil {
+		img := xlib.cursorLibraryLoadImage(name, theme, size)
+		if img != nil {
+			cursor := xlib.cursorImageLoadCursor(display, img)
+			xlib.cursorImageDestroy(img)
+			return cursor
+		}
+	}
+
+	return xlib.CreateFontCursor(display, fallback)
+}
+
+_create_cursors :: proc(display: ^xlib.Display) {
+	theme := xlib.cursorGetTheme(display)
+	size := xlib.cursorGetDefaultSize(display)
+	default_cursor = _create_cursor(display, "default", theme, size, .XC_left_ptr)
+	pointer_cursor = _create_cursor(display, "pointer", theme, size, .XC_hand2)
+	text_cursor = _create_cursor(display, "text", theme, size, .XC_xterm)
+}
+
+create_context :: proc(title: cstring, width, height: int) -> (GFX_Context, f64, f64, f64) {
+	gfx := GFX_Context{}
+
+	dpy := xlib.OpenDisplay(nil)
+	if dpy == nil {
+		fmt.printf("Failed to open X!\n")
+		os.exit(1)
+	}
+
+	vis := xlib.DefaultVisual(dpy, 0)
+	root_win := xlib.DefaultRootWindow(dpy)
+
+	wattr := xlib.XSetWindowAttributes{}
+	wattr.event_mask = {
+		.ButtonPress, .ButtonRelease, .PointerMotion,
+		.KeyPress, .KeyRelease, 
+		.EnterWindow, .LeaveWindow,
+		.StructureNotify,
+	}
+
+	wmask := xlib.WindowAttributeMask{}
+	wmask = {.CWEventMask}
+
+	window := xlib.CreateWindow(dpy, root_win, 0, 0, u32(width), u32(height), 0, 0, .InputOutput, vis, wmask, &wattr)
+
+	wm_proto                := xlib.InternAtom(dpy, "WM_PROTOCOLS", false)
+	delete_win              := xlib.InternAtom(dpy, "WM_DELETE_WINDOW", false)
+	utf8_string             := xlib.InternAtom(dpy, "UTF8_STRING", false)
+	net_wm_name             := xlib.InternAtom(dpy, "_NET_WM_NAME", false)
+	net_wm_icon_name        := xlib.InternAtom(dpy, "_NET_WM_ICON_NAME", false)
+	net_wm_state            := xlib.InternAtom(dpy, "_NET_WM_STATE", false)
+	net_wm_state_fullscreen := xlib.InternAtom(dpy, "_NET_WM_STATE_FULLSCREEN", false)
+	xlib.SetWMProtocols(dpy, window, &delete_win, 1)
+
+	xlib.StoreName(dpy, window, title)
+	xlib.MapRaised(dpy, window)
+
+	egl_display := egl.GetDisplay(egl.NativeDisplayType(dpy))
+	if egl_display == egl.NO_DISPLAY {
+		fmt.printf("Failed to get display!\n")
+		os.exit(1)
+	}
+
+	{
+		major : i32 = 0
+		minor : i32 = 0
+		if egl.Initialize(egl_display, &major, &minor) == 0 {
+			fmt.printf("Failed to init EGL display!\n")
+			os.exit(1)
+		}
+
+		if major < 1 || (major == 1 && minor < 4) {
+			fmt.printf("EGL version 1.4 required, got %d.%d\n", major, minor)
+			os.exit(1)
+		}
+
+		if egl.BindAPI(egl.OPENGL_API) == 0 {
+			fmt.printf("Failed to select OpenGL API!\n")
+			os.exit(1)
+		}
+	}
+
+	config := egl.Config{}
+	{
+		attr := [?]i32{
+			egl.SURFACE_TYPE,	   egl.WINDOW_BIT,
+			egl.CONFORMANT,		   egl.OPENGL_BIT,
+			egl.RENDERABLE_TYPE,   egl.OPENGL_BIT,
+			egl.COLOR_BUFFER_TYPE, egl.RGB_BUFFER,
+
+			egl.RED_SIZE,	   8,
+			egl.GREEN_SIZE,    8,
+			egl.BLUE_SIZE,	   8,
+			egl.DEPTH_SIZE,   24,
+			egl.STENCIL_SIZE,  8,
+
+			egl.NONE,
+		}
+
+		count : i32 = 0
+		if egl.ChooseConfig(egl_display, raw_data(&attr), &config, 1, &count) == 0 || count != 1 {
+			fmt.printf("Can't choose provided EGL config\n")
+			os.exit(1)
+		}
+	}
+
+	surface := egl.Surface{}
+	{
+		attr := [?]i32{
+			egl.GL_COLORSPACE, egl.GL_COLORSPACE_LINEAR,
+			egl.RENDER_BUFFER, egl.BACK_BUFFER,
+			egl.NONE,
+		}
+
+		surface = egl.CreateWindowSurface(egl_display, config, egl.NativeWindowType(uintptr(window)), raw_data(&attr))
+		if surface == egl.NO_SURFACE {
+			fmt.printf("Cannot create EGL surface!\n")
+			os.exit(1)
+		}
+	}
+
+	major_version := 3
+	minor_version := 3
+	ctx := egl.Context{}
+	{
+		attr := [?]i32{
+			egl.CONTEXT_MAJOR_VERSION, i32(major_version),
+			egl.CONTEXT_MINOR_VERSION, i32(minor_version),
+			egl.CONTEXT_OPENGL_PROFILE_MASK, egl.CONTEXT_OPENGL_CORE_PROFILE_BIT,
+			egl.NONE,
+		}
+
+		ctx = egl.CreateContext(egl_display, config, egl.NO_CONTEXT, raw_data(&attr))
+		if ctx == egl.NO_CONTEXT {
+			fmt.printf("Unable to create EGL context, OpenGL 3.3 not supported?\n")
+			os.exit(1)
+		}
+	}
+	gl.load_up_to(major_version, minor_version, egl.gl_set_proc_address)
+
+	egl.MakeCurrent(egl_display, surface, surface, ctx)
+	egl.SwapInterval(egl_display, 1)
+	xlib.MapWindow(dpy, window)
+	xlib.XrmInitialize()
+
+	_create_cursors(dpy)
+
+	dpr := f64(_get_dpi(dpy) / 96.0)
+
+	gfx.x_display = dpy
+	gfx.egl_display = egl_display
+	gfx.root_win = root_win
+	gfx.window = window
+	gfx.surface = surface
+
+	gfx.delete_win = delete_win
+	gfx.wm_protos = wm_proto
+	gfx.net_wm_state = net_wm_state
+	gfx.net_wm_state_fullscreen = net_wm_state_fullscreen
+
+	gfx.utf8_string = utf8_string
+	gfx.net_wm_name = net_wm_name
+	gfx.net_wm_icon_name = net_wm_icon_name
+
+	gfx.rects = make([dynamic]DrawRect)
+	gfx.text_rects = make([dynamic]TextRect)
+	return gfx, dpr, f64(width), f64(height)
+}
+
+_resolve_key :: proc(x_display: ^xlib.Display, keycode: u8) -> KeyType {
+	dummy: i32
+	keysyms := xlib.GetKeyboardMapping(x_display, u8(keycode), 1, &dummy)
+	sym := slice.from_ptr(keysyms, 1)[0]
+	key := normalize_key(sym)
+	xlib.Free(keysyms)
+	return key
+}
+
+
+get_next_event :: proc(gfx: ^GFX_Context, wait: bool) -> PlatformEvent {
+	if xlib.Pending(gfx.x_display) == 0 {
+		return PlatformEvent{type = .None}
+	}
+
+	event: xlib.XEvent
+
+	xlib.NextEvent(gfx.x_display, &event)
+	#partial switch event.type {
+		case .ClientMessage: {
+			if event.xclient.message_type == gfx.wm_protos {
+				protocol := event.xclient.data.l[0]
+				if xlib.Atom(protocol) == gfx.delete_win {
+					return PlatformEvent{type = .Exit}
+				}
+			}
+		}
+		case .ButtonPress: {
+			type := MouseButtonType.None
+			#partial switch event.xbutton.button {
+				case .Button1: type = .Left
+				case .Button2: type = .Middle
+				case .Button3: type = .Right
+			}
+			return PlatformEvent{type = .MouseDown, mouse = type, x = f64(event.xbutton.x), y = f64(event.xbutton.y)}
+		}
+		case .ButtonRelease: {
+			type := MouseButtonType.None
+			#partial switch event.xbutton.button {
+				case .Button1: type = .Left
+				case .Button2: type = .Middle
+				case .Button3: type = .Right
+			}
+			return PlatformEvent{type = .MouseUp, mouse = type, x = f64(event.xbutton.x), y = f64(event.xbutton.y)}
+		}
+		case .MotionNotify: {
+			return PlatformEvent{type = .MouseMoved, x = f64(event.xmotion.x), y = f64(event.xmotion.y)}
+		}
+		case .KeyPress: {
+			key := _resolve_key(gfx.x_display, u8(event.xkey.keycode))
+			return PlatformEvent{type = .KeyDown, key = key}
+		}
+		case .KeyRelease: {
+			key := _resolve_key(gfx.x_display, u8(event.xkey.keycode))
+			return PlatformEvent{type = .KeyUp, key = key}
+		}
+		case .ConfigureNotify: {
+			return PlatformEvent{type = .Resize, w = f64(event.xconfigure.width), h = f64(event.xconfigure.height)}
+		}
+	}
+	return PlatformEvent{type = .More}
+}
+
+swap_buffers :: proc(gfx: ^GFX_Context) {
+	egl.SwapBuffers(gfx.egl_display, gfx.surface)
+}
+
+x11_send_event :: proc(gfx: ^GFX_Context, type: xlib.Atom, a, b, c, d, e: int) {
+	event := xlib.XEvent{}
+	event.type = .ClientMessage
+	event.xclient.window = gfx.window
+	event.xclient.format = 32
+	event.xclient.message_type = type
+	event.xclient.data.l[0] = a
+	event.xclient.data.l[1] = b
+	event.xclient.data.l[2] = c
+	event.xclient.data.l[3] = d
+	event.xclient.data.l[4] = e
+
+	xlib.SendEvent(gfx.x_display, gfx.root_win, false, xlib.EventMask{.SubstructureNotify, .SubstructureRedirect}, &event)
+}
+
+set_fullscreen :: proc(gfx: ^GFX_Context, fullscreen: bool) -> (int, int) {
+	if fullscreen {
+		x11_send_event(gfx, gfx.net_wm_state, 1, int(gfx.net_wm_state_fullscreen), 0, 1, 0)
+	} else {
+		x11_send_event(gfx, gfx.net_wm_state, 0, int(gfx.net_wm_state_fullscreen), 0, 1, 0)
+	}
+
+	xlib.Flush(gfx.x_display)
+	return 0, 0
+}
+
+get_clipboard :: proc() -> string {
+	return ""
+}
+set_clipboard :: proc(text: string) {
+}
+
+set_window_title :: proc(gfx: ^GFX_Context, title: cstring) {
+	xlib.utf8SetWMProperties(gfx.x_display, gfx.window, title, title, nil, 0, nil, nil, nil)
+	xlib.ChangeProperty(gfx.x_display, gfx.window, gfx.net_wm_name, gfx.utf8_string, 8, xlib.PropModeReplace, rawptr(title), i32(len(title)))
+	xlib.ChangeProperty(gfx.x_display, gfx.window, gfx.net_wm_icon_name, gfx.utf8_string, 8, xlib.PropModeReplace, rawptr(title), i32(len(title)))
+	xlib.Flush(gfx.x_display)
+}
+
+
+set_cursor :: proc(gfx: ^GFX_Context, type: string) {
+	switch type {
+	case "auto":    xlib.DefineCursor(gfx.x_display, gfx.window, default_cursor)
+	case "pointer": xlib.DefineCursor(gfx.x_display, gfx.window, pointer_cursor)
+	case "text":    xlib.DefineCursor(gfx.x_display, gfx.window, text_cursor)
+	}
+	xlib.Flush(gfx.x_display)
+	is_hovering = true
+}
+reset_cursor :: proc(gfx: ^GFX_Context) { 
+	set_cursor(gfx, "auto") 
+	is_hovering = false
 }
