@@ -6,6 +6,10 @@ jobs:
     name: Ubuntu Build and Test
     runs-on: ubuntu-latest
     steps:
+      - name: Grab Spall Dependencies
+        run: |
+            apt install libxcursor-dev libegl-dev
+
       - name: Checkout Spall
         uses: actions/checkout@v4
     
