@@ -249,6 +249,7 @@ _create_cursors :: proc(display: ^xlib.Display) {
 
 create_context :: proc(title: cstring, width, height: int) -> (GFX_Context, f64, f64, f64) {
 	gfx := GFX_Context{}
+	velocity_multiplier = -100
 
 	dpy := xlib.OpenDisplay(nil)
 	if dpy == nil {
@@ -494,6 +495,7 @@ get_next_event :: proc(gfx: ^GFX_Context, wait: bool) -> PlatformEvent {
 					src_win := xlib.Window(event.xclient.data.l[0])
 					is_list := 0 != (event.xclient.data.l[1] & 0b1)
 					version := event.xclient.data.l[1] >> 24
+					gfx.dnd_format = 0
 
 					fmts: rawptr
 					count: uint
@@ -521,6 +523,21 @@ get_next_event :: proc(gfx: ^GFX_Context, wait: bool) -> PlatformEvent {
 
 					gfx.dnd_src_window = src_win
 					gfx.dnd_version = version
+				}
+				case gfx.dnd_position: {
+					// Confirm Position Update
+					reply := xlib.XEvent{}
+					reply.type = .ClientMessage
+					reply.xclient.window = gfx.dnd_src_window
+					reply.xclient.message_type = gfx.dnd_status
+					reply.xclient.format = 32
+					reply.xclient.data.l[0] = int(gfx.window)
+					if gfx.dnd_format != 0 {
+						reply.xclient.data.l[1] = 1
+						reply.xclient.data.l[4] = int(gfx.dnd_action_copy)
+					}
+					xlib.SendEvent(gfx.x_display, gfx.dnd_src_window, false, {}, &reply)
+					xlib.Flush(gfx.x_display)
 				}
 				case gfx.dnd_drop: {
 					time := xlib.Time(event.xclient.data.l[2])
@@ -569,6 +586,13 @@ get_next_event :: proc(gfx: ^GFX_Context, wait: bool) -> PlatformEvent {
 				case .Button1: type = .Left
 				case .Button2: type = .Middle
 				case .Button3: type = .Right
+				case:
+					switch int(event.xbutton.button) {
+						case 4: return PlatformEvent{type = .Scroll, x =  0, y =  1}
+						case 5: return PlatformEvent{type = .Scroll, x =  0, y = -1}
+						case 6: return PlatformEvent{type = .Scroll, x =  1, y =  0}
+						case 7: return PlatformEvent{type = .Scroll, x = -1, y =  0}
+					}
 			}
 			return PlatformEvent{type = .MouseDown, mouse = type, x = f64(event.xbutton.x), y = f64(event.xbutton.y)}
 		}
