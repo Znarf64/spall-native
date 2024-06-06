@@ -6,10 +6,6 @@ jobs:
     name: Ubuntu Build and Test
     runs-on: ubuntu-latest
     steps:
-      - name: Grab Spall Dependencies
-        run: |
-          sudo apt install libsdl2-dev
-    
       - name: Checkout Spall
         uses: actions/checkout@v4
     
