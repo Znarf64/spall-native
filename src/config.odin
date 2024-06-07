@@ -320,7 +320,7 @@ chunk_events :: proc(trace: ^Trace) {
 		}
 	}
 
-	fmt.printf("LOD memory: %v MB | Event memory: %v MB\n", f64(lod_mem_usage) / 1024 / 1024, f64(ev_mem_usage) / 1024 / 1024)
+	fmt.printf("LOD memory: %M | Event memory: %M\n", lod_mem_usage, ev_mem_usage)
 }
 
 get_left_child :: #force_inline proc(idx: int) -> int {
@@ -562,7 +562,7 @@ load_file :: proc(trace: ^Trace, file_name: string) {
 		return
 	}
 	trace.total_size = total_size
-	fmt.printf("Loading %s, %f MB\n", trace.base_name, f64(trace.total_size) / 1024 / 1024)
+	fmt.printf("Loading %s, %M\n", trace.base_name, trace.total_size)
 
 	header_buffer := [0x4000]u8{}
 	rd_sz, err3 := os.read_at(trace_fd, header_buffer[:], 0)
