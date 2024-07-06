@@ -199,10 +199,12 @@ jobs:
           cp -r examples/*                  spall_pkg/examples/.
           cp spall_linux/spall              spall_pkg/spall_linux
           cp spall_windows/spall.exe        spall_pkg/spall_windows.exe
+          chmod +x pall_pkg/spall_linux
           echo "DATE=$(date '+%Y_%m_%d')" >> $GITHUB_ENV
+          zip -r spall_native_${{ env.DATE }}.zip spall_pkg
 
       - name: Upload Release Build
         uses: actions/upload-artifact@v4
         with:
           name: spall_native_${{ env.DATE }}
-          path: spall_pkg
+          path: spall_native_${{ env.DATE }}.zip
