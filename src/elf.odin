@@ -689,40 +689,8 @@ load_elf :: proc(trace: ^Trace, binary_blob: []u8) -> bool {
 		}
 	}
 
-	tmp_buffer := make([]u8, 1024*1024, context.temp_allocator)
-	skew_size : u64 = 0
-	symbol_found := false
-	sym_size := get_symbol_size(&ctx)
-	for i := 0; i < len(sym_buffer); i += sym_size {
-		symbol, ok := parse_symbol(&ctx, sym_buffer[i:])
-		if !ok {
-			return false
-		}
-
-		type := Symbol_Type(u8(symbol.info & 0xf))
-		if type != .func || symbol.value == 0 {
-			continue
-		}
-
-		symbol_name := string(cstring(raw_data(str_buffer[symbol.name:])))
-		demangled_name, ok2 := demangle_symbol(symbol_name, tmp_buffer)
-		if !ok2 {
-			return false
-		}
-
-		interned_symbol := in_get(&trace.intern, &trace.string_block, demangled_name)
-		am_insert(&trace.addr_map, symbol.value, interned_symbol)
-
-		if !symbol_found && symbol_name == "spall_auto_init" {
-			skew_size = trace.skew_address - u64(symbol.value)
-			symbol_found = true
-		}
-	}
-
-	am_skew(&trace.addr_map, skew_size)
-
 	// Start parsing DWARF normally from here
-	if !load_dwarf(trace, &sections, skew_size) {
+	if !load_dwarf(trace, &sections) {
 		fmt.printf("DWARF parsing failed!\n")
 	}
 

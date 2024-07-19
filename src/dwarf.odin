@@ -220,12 +220,22 @@ Dw_At :: enum {
 	loclists_base      = 0x8c,
 
 	// GNU extensions
+	GNU_vector         = 0x2107,
 	GNU_template_name  = 0x2110,
 	GNU_pubnames       = 0x2134,
 
 	GNU_discriminator  = 0x2136,
 	GNU_locviews       = 0x2137,
 	GNU_entry_view     = 0x2138,
+
+	// LLVM extensions
+	LLVM_include_path  = 0x3e00,
+	LLVM_config_macros = 0x3e01,
+	LLVM_isysroot      = 0x3e02,
+
+	// Apple extensions
+	APPLE_optimized    = 0x3fe1,
+	APPLE_sdk          = 0x3fef,
 }
 
 Dw_Tag :: enum {
@@ -424,6 +434,14 @@ Abbrev_Unit :: struct {
 	attrs_buf: []u8,
 }
 
+Function_Unit :: struct {
+	name: cstring,
+	low_pc:  u64,
+	high_pc: u64,
+	ranges_off: u64,
+	origin: u64,
+}
+
 Sections :: struct {
 	debug_str:   []u8,
 	str_offsets: []u8,
@@ -432,6 +450,49 @@ Sections :: struct {
 	addr:        []u8,
 	abbrev:      []u8,
 	info:        []u8,
+}
+
+normalize_unum :: proc(attr_val: Attr_Entry) -> (u64, bool) {
+	#partial switch attr_val.form {
+	case .data1:
+		v, ok := attr_val.data.(u8)
+		return u64(v), ok
+	case .data2:
+		v, ok := attr_val.data.(u16)
+		return u64(v), ok
+	case .data4:
+		v, ok := attr_val.data.(u32)
+		return u64(v), ok
+	case .data8:
+		v, ok := attr_val.data.(u64)
+		return v, ok
+	case .ref1:
+		v, ok := attr_val.data.(u8)
+		return u64(v), ok
+	case .ref2:
+		v, ok := attr_val.data.(u16)
+		return u64(v), ok
+	case .ref4:
+		v, ok := attr_val.data.(u32)
+		return u64(v), ok
+	case .ref8:
+		v, ok := attr_val.data.(u64)
+		return v, ok
+
+	// Technically, this is only u32 in DWARF32...
+	case .sec_offset:
+		v, ok := attr_val.data.(u32)
+		return u64(v), ok
+
+	// This should be machine-arch dependant, will break on 32-bit binaries
+	case .addr:
+		v, ok := attr_val.data.(u64)
+		return v, ok
+
+	case:
+		fmt.printf("FAILED TO PARSE: %v\n", attr_val)
+		return 0, false
+	}
 }
 
 parse_line_header :: proc(ctx: ^DWARF_Context, blob: []u8) -> (DWARF_Line_Header, int, bool) {
@@ -668,7 +729,7 @@ cleanup_cu_list :: proc(cu_list: ^[dynamic]CU_Unit) {
 	}
 }
 
-load_dwarf :: proc(trace: ^Trace, sections: ^Sections, skew_size: u64) -> bool {
+load_dwarf :: proc(trace: ^Trace, sections: ^Sections) -> bool {
 	debug_str_offsets := []u8{}
 	if len(sections.str_offsets) > 0 {
 		fmt.printf("DWARF: parsing debug_str_offset\n")
@@ -1150,21 +1211,6 @@ load_dwarf :: proc(trace: ^Trace, sections: ^Sections, skew_size: u64) -> bool {
 		}
 	}
 
-	fmt.printf("DWARF: sorting lines\n")
-	for &cu, c_idx in cu_list {
-		for &line in cu.line_table.lines {
-			name, ok := cu_file_map[CU_File_Entry{u64(c_idx), line.file_idx}]
-			if !ok {
-				name = ""
-			}
-			non_zero_append(&trace.line_info, Line_Info{line.address + skew_size, line.line_num, name})
-		}
-
-	}
-	line_order :: proc(a, b: Line_Info) -> bool {
-		return a.address < b.address
-	}
-	slice.sort_by(trace.line_info[:], line_order)
 
 	// chunk through all abbreviations
 	cu_start := 0
@@ -1242,6 +1288,9 @@ load_dwarf :: proc(trace: ^Trace, sections: ^Sections, skew_size: u64) -> bool {
 	MAX_BLOCK_STACK :: 30
 	cu_start_offset  := 0
 
+	func_offset_map := make(map[int]Function_Unit)
+	defer delete(func_offset_map)
+
 	// Process the CUs using the abbrev data
 	fmt.printf("DWARF: parsing debug_info\n")
 	for i := 0; i < len(sections.info); {
@@ -1280,8 +1329,6 @@ load_dwarf :: proc(trace: ^Trace, sections: ^Sections, skew_size: u64) -> bool {
 			return false
 		}
 
-		//fmt.printf("0x%x, %v, %v\n", unit_length, version, cu_hdr)
-
 		child_level := 1
 		first_entry := true
 
@@ -1308,9 +1355,10 @@ load_dwarf :: proc(trace: ^Trace, sections: ^Sections, skew_size: u64) -> bool {
 			au := &abbrevs[abbrev_idx]
 
 			block_offset := i - size
-			//fmt.printf("%x | %d | %v\n", block_offset, abbrev_id, au.type)
 
 			is_function := au.type == .subprogram || au.type == .inlined_subroutine
+			fu := Function_Unit{}
+
 			for j := 0; j < len(au.attrs_buf); {
 				attr_name, size, ok := read_uleb(au.attrs_buf[j:])
 				if !ok {
@@ -1335,11 +1383,29 @@ load_dwarf :: proc(trace: ^Trace, sections: ^Sections, skew_size: u64) -> bool {
 					panic("%s\n", #location())
 				}
 
-				/*
 				attr_field := Dw_At(attr_name)
 				attr_val := Attr_Entry{form = Dw_Form(attr_form), data = data}
-				fmt.printf("\t%v (%v)\n", attr_field, attr_val)
-				*/
+				if is_function {
+					#partial switch attr_field {
+					case .name:
+						fu.name, ok = attr_val.data.(cstring)
+						assert(ok)
+					case .low_pc:
+						fu.low_pc, ok = normalize_unum(attr_val)
+						assert(ok)
+					case .high_pc:
+						fu.high_pc, ok = normalize_unum(attr_val)
+						assert(ok)
+					case .abstract_origin:
+						fu.origin, ok = normalize_unum(attr_val)
+						assert(ok)
+					case .ranges:
+						fu.ranges_off, ok = normalize_unum(attr_val)
+						assert(ok)
+					}
+
+					//fmt.printf("\tattr: %v (%v)\n", attr_field, attr_val)
+				}
 
 				// implicit const lives in the attr buffer, rather than in the .debug_info
 				if attr_code == .implicit_const {
@@ -1348,6 +1414,9 @@ load_dwarf :: proc(trace: ^Trace, sections: ^Sections, skew_size: u64) -> bool {
 					i += skip_size
 				}
 			}
+			if is_function {
+				func_offset_map[block_offset] = fu
+			}
 
 			if au.has_children {
 				child_level += 1
@@ -1355,6 +1424,54 @@ load_dwarf :: proc(trace: ^Trace, sections: ^Sections, skew_size: u64) -> bool {
 		}
 		cu_start_offset = i
 	}
+
+	// Resolve all the symbols we can
+	fmt.printf("DWARF: Resolving symbols\n")
+
+	symbol_found := false
+	skew_size : u64 = 0
+	for off, func in func_offset_map {
+		if func.low_pc == 0 && func.high_pc == 0 {
+			// This function is incomplete
+			continue
+		}
+
+		fu := Function_Unit{}
+		fu.name = func.name
+		if fu.name == "" {
+			parent_func := func_offset_map[int(func.origin)]
+			fu.name = parent_func.name
+		}
+		fu.low_pc = func.low_pc
+		fu.high_pc = func.low_pc + func.high_pc
+
+		symbol_addr := func.low_pc
+		symbol_name := strings.clone_from_cstring(func.name, context.temp_allocator)
+		interned_symbol := in_get(&trace.intern, &trace.string_block, symbol_name)
+		am_insert(&trace.addr_map, symbol_addr, interned_symbol)
+
+		if !symbol_found && symbol_name == "spall_auto_init" {
+			skew_size = trace.skew_address - symbol_addr
+			symbol_found = true
+		}
+	}
+	am_skew(&trace.addr_map, skew_size)
+
+	fmt.printf("DWARF: sorting lines\n")
+	for &cu, c_idx in cu_list {
+		for &line in cu.line_table.lines {
+			name, ok := cu_file_map[CU_File_Entry{u64(c_idx), line.file_idx}]
+			if !ok {
+				name = ""
+			}
+			non_zero_append(&trace.line_info, Line_Info{line.address + skew_size, line.line_num, name})
+		}
+
+	}
+	line_order :: proc(a, b: Line_Info) -> bool {
+		return a.address < b.address
+	}
+	slice.sort_by(trace.line_info[:], line_order)
 
 	return true
 }

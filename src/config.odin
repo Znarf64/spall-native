@@ -458,13 +458,6 @@ load_executable :: proc(trace: ^Trace, file_name: string) -> bool {
 			return false
 		}
 	} else if magic_chunk == MACH_MAGIC_64 {
-		skew_size : u64 = 0
-		ok := load_macho_symbols(trace, exec_buffer, &skew_size)
-		if !ok {
-			post_error(trace, "Failed to parse Mach-O!")
-			return false
-		}
-
 		file_base := filepath.base(file_name)
 		b := strings.builder_make(context.temp_allocator)
 		strings.write_string(&b, file_name)
@@ -478,7 +471,7 @@ load_executable :: proc(trace: ^Trace, file_name: string) -> bool {
 			return false
 		}
 
-		load_macho_debug(trace, debug_buffer, skew_size)
+		load_macho_debug(trace, debug_buffer)
 	} else if bytes.equal(exec_buffer[:2], DOS_MAGIC) {
 		ok := load_pe32(trace, exec_buffer)
 		if !ok {
