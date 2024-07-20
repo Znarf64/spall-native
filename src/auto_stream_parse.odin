@@ -248,7 +248,7 @@ as_parse :: proc(trace: ^Trace, fd: os.Handle, header_size: i64) -> bool {
 
 		thread_idx := setup_tid(trace, proc_idx, buffer_header.tid)
 		thread := &process.threads[thread_idx]
-		for u32(len(thread.depths)) < buffer_header.max_depth {
+		for u32(len(thread.depths)) <= buffer_header.max_depth {
 			depth := Depth{
                 events = make([dynamic]Event),
 			}

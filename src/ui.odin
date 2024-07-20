@@ -2113,6 +2113,8 @@ build_selected_ranges :: proc(trace: ^Trace, ui_state: ^UIState) {
 			}
 
 			for depth, d_idx in thread.depths {
+				if len(depth.events) == 0 { continue }
+
 				start_idx := find_idx(trace, depth.events[:], i64(trace.stats.start_time))
 				end_idx := find_idx(trace, depth.events[:], i64(trace.stats.end_time))
 				if start_idx == -1 {

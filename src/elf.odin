@@ -686,6 +686,10 @@ load_elf :: proc(trace: ^Trace, binary_blob: []u8) -> bool {
 			sections.abbrev = create_subbuffer(binary_blob, section_hdr.offset, section_hdr.size) or_return
 		case ".debug_addr":
 			sections.addr = create_subbuffer(binary_blob, section_hdr.offset, section_hdr.size) or_return
+		case ".debug_ranges":
+			sections.ranges = create_subbuffer(binary_blob, section_hdr.offset, section_hdr.size) or_return
+		case ".debug_rnglists":
+			sections.rnglists = create_subbuffer(binary_blob, section_hdr.offset, section_hdr.size) or_return
 		}
 	}
 

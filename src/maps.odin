@@ -6,7 +6,6 @@ import "core:hash"
 import "core:strings"
 import "core:slice"
 
-VH_LOAD_FACTOR :: 0.75
 // u32 -> u32 map
 PTEntry :: struct {
 	key: u32,
@@ -25,7 +24,8 @@ vh_init :: proc(allocator := context.allocator) -> ValHash {
 	for i in 0..<len(v.hashes) {
 		v.hashes[i] = -1
 	}
-	v.resize_threshold = i64(f64(len(v.hashes)) * VH_LOAD_FACTOR)
+	
+	v.resize_threshold = i64((3 * len(v.hashes)) / 4)
 	return v
 }
 
@@ -63,7 +63,7 @@ vh_grow :: proc(v: ^ValHash) {
 		v.hashes[i] = -1
 	}
 
-	v.resize_threshold = i64(f64(len(v.hashes)) * VH_LOAD_FACTOR)
+	v.resize_threshold = i64((3 * len(v.hashes)) / 4)
 	for entry, idx in v.entries {
 		vh_reinsert(v, entry, idx)
 	}
@@ -105,8 +105,6 @@ vh_insert :: proc(v: ^ValHash, key: u32, val: int) {
 	push_fatal(SpallError.Bug)
 }
 
-INMAP_LOAD_FACTOR :: 0.75
-
 // String interning
 INMap :: struct {
 	entries: [dynamic]u64,
@@ -123,7 +121,8 @@ in_init :: proc(allocator := context.allocator) -> INMap {
 	for i in 0..<len(v.hashes) {
 		v.hashes[i] = -1
 	}
-	v.resize_threshold = i64(f64(len(v.hashes)) * INMAP_LOAD_FACTOR) 
+
+	v.resize_threshold = i64((3 * len(v.hashes)) / 4)
 	return v
 }
 in_free :: proc(v: ^INMap) {
@@ -155,7 +154,8 @@ in_grow :: proc(v: ^INMap, strings: ^[dynamic]u8) {
 		v.hashes[i] = -1
 	}
 
-	v.resize_threshold = i64(f64(len(v.hashes)) * INMAP_LOAD_FACTOR) 
+	v.resize_threshold = i64((3 * len(v.hashes)) / 4)
+
 	for entry, idx in v.entries {
 		in_reinsert(v, strings, entry, idx)
 	}
@@ -266,7 +266,6 @@ km_find :: proc (v: ^KeyMap, key: string) -> (FieldType, bool) {
 }
 
 // Tracking for FunctionStats
-SMMAP_LOAD_FACTOR :: 0.75
 StatKey :: struct #packed {
 	has_addr: b8,
 	id: u64,
@@ -315,7 +314,7 @@ sm_grow :: proc(v: ^StatMap) {
 		v.hashes[i] = -1
 	}
 
-	v.resize_threshold = i64(f64(len(v.hashes)) * SMMAP_LOAD_FACTOR) 
+	v.resize_threshold = i64((3 * len(v.hashes)) / 4)
 	for entry, idx in v.entries {
 		sm_reinsert(v, entry, idx)
 	}
@@ -379,7 +378,7 @@ sm_clear :: proc(v: ^StatMap)  {
 	for i in 0..<len(v.hashes) {
 		v.hashes[i] = -1
 	}
-	v.resize_threshold = i64(f64(len(v.hashes)) * SMMAP_LOAD_FACTOR) 
+	v.resize_threshold = i64((3 * len(v.hashes)) / 4)
 }
 sm_free :: proc(v: ^StatMap) {
 	delete(v.entries)
@@ -387,7 +386,6 @@ sm_free :: proc(v: ^StatMap) {
 }
 
 // Address Map hashtable
-AM_LOAD_FACTOR :: 0.70
 // address -> string idx map
 AMEntry :: struct #packed {
 	key: u64,
@@ -406,7 +404,7 @@ am_init :: proc(allocator := context.allocator) -> AMMap {
 	for i in 0..<len(v.hashes) {
 		v.hashes[i] = -1
 	}
-	v.resize_threshold = i64(f64(len(v.hashes)) * AM_LOAD_FACTOR)
+	v.resize_threshold = i64((3 * len(v.hashes)) / 4)
 	return v
 }
 
@@ -446,7 +444,7 @@ am_grow :: proc(v: ^AMMap) {
 		v.hashes[i] = -1
 	}
 
-	v.resize_threshold = i64(f64(len(v.hashes)) * AM_LOAD_FACTOR)
+	v.resize_threshold = i64((3 * len(v.hashes)) / 4)
 	for entry, idx in v.entries {
 		am_reinsert(v, entry, i32(idx))
 	}

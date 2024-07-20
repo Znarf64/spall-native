@@ -128,7 +128,7 @@ extern "C" {
 #endif
 
 #define SPALL_NOINSTRUMENT __attribute__((no_instrument_function))
-#define SPALL_FORCEINLINE __attribute__((always_inline))
+#define SPALL_FORCEINLINE __attribute__((always_inline)) inline
 #define __debugbreak() __builtin_trap()
 
 #if SPALL_IS_CPP
