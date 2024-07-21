@@ -64,8 +64,10 @@ as_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, threa
 
 		current_time^ = current_time^ + i64(dt)
 		current_addr^ = current_addr^ ~ d_addr
+		current_caller^ = current_caller^ ~ d_caller
 
 		id := current_addr^
+		caller_id := current_caller^
 		timestamp := current_time^
 
 		if thread.max_time > timestamp {
@@ -88,6 +90,7 @@ as_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, threa
 		ev^ = Event{
 			has_addr = true,
 			id = id,
+			args = caller_id,
 			duration = -1,
 			timestamp = timestamp,
 		}

@@ -717,8 +717,11 @@ get_line_info :: proc(trace: ^Trace, addr: u64) -> (string, u64, bool) {
 		return "", 0, false
 	}
 
+	line_info_start := trace.line_info[0].address
+	line_info_end := trace.line_info[len(trace.line_info)-1].address
+
 	// make sure address is within line-info bounds
-	if trace.line_info[0].address > addr || trace.line_info[len(trace.line_info)-1].address < addr {
+	if line_info_start > addr || line_info_end < addr {
 		return "", 0, false
 	}
 
@@ -731,6 +734,10 @@ get_line_info :: proc(trace: ^Trace, addr: u64) -> (string, u64, bool) {
 
 		line_info := trace.line_info[mid]
 		if addr == line_info.address {
+			if line_info.line_num == 0 {
+				return "", 0, false
+			}
+
 			return line_info.filename, line_info.line_num, true
 		} else if addr > line_info.address { 
 			low = mid + 1
@@ -740,9 +747,15 @@ get_line_info :: proc(trace: ^Trace, addr: u64) -> (string, u64, bool) {
 	}
 
 	line_info := trace.line_info[low]
+
 	if addr == line_info.address {
+		if line_info.line_num == 0 {
+			return "", 0, false
+		}
+
 		return line_info.filename, line_info.line_num, true
 	}
 
+	//fmt.printf("Failed to match: 0x08%x\n", addr)
 	return "", 0, false
 }

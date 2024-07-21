@@ -81,10 +81,11 @@ load_macho_debug :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 		return false
 	}
 
-	abbrev_section := Mach_Section{}
-	info_section   := Mach_Section{}
-	line_section   := Mach_Section{}
-	debug_str_section    := Mach_Section{}
+	abbrev_section    := Mach_Section{}
+	info_section      := Mach_Section{}
+	line_section      := Mach_Section{}
+	debug_str_section := Mach_Section{}
+	ranges_section    := Mach_Section{}
 	found_debug := 0
 
 	read_idx := size_of(Mach_Header_64)
@@ -111,6 +112,7 @@ load_macho_debug :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 					case "__debug_info":   info_section      = section; found_debug += 1
 					case "__debug_line":   line_section      = section; found_debug += 1
 					case "__debug_str":    debug_str_section = section; found_debug += 1
+					case "__debug_ranges": ranges_section    = section; found_debug += 1
 					}
 
 					sub_idx += size_of(Mach_Section)
@@ -124,7 +126,7 @@ load_macho_debug :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 	if read_idx >= len(exec_buffer) {
 		return false
 	}
-	if found_debug < 3 {
+	if found_debug < 4 {
 		return false
 	}
 
@@ -133,6 +135,7 @@ load_macho_debug :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 	sections.info      = create_subbuffer(exec_buffer, u64(info_section.offset), info_section.size) or_return
 	sections.line      = create_subbuffer(exec_buffer, u64(line_section.offset), line_section.size) or_return
 	sections.debug_str = create_subbuffer(exec_buffer, u64(debug_str_section.offset),  debug_str_section.size) or_return
+	sections.ranges    = create_subbuffer(exec_buffer, u64(ranges_section.offset),  ranges_section.size) or_return
 
 	// Start parsing DWARF normally from here
 	if !load_dwarf(trace, &sections) {

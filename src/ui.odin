@@ -563,19 +563,26 @@ draw_rect_tooltip :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) 
 	rect_height := text_height + (1.25 * em)
 	rect_width := name_width + em + stats_width + em
 
-	line_info := ""
+	args := ""
+	called_loc := ""
+	defined_loc := ""
 	if ev.has_addr {
-		file, line, ok := get_line_info(trace, ev.id)
+		file, line, ok := get_line_info(trace, ev.args)
 		if ok {
-			line_info = fmt.tprintf("%s:%d", file, line)
-			info_width := measure_text(line_info, .PSize, .DefaultFont)
+			called_loc = fmt.tprintf("call site %s:%d", file, line)
+			info_width := measure_text(called_loc, .PSize, .DefaultFont)
 			rect_width = max(rect_width, info_width + em)
 			next_line(&rect_height, em)
 		}
-	}
 
-	args := ""
-	if ev.args > 0 {
+		file, line, ok = get_line_info(trace, ev.id)
+		if ok {
+			defined_loc = fmt.tprintf("definition %s:%d", file, line)
+			info_width := measure_text(defined_loc, .PSize, .DefaultFont)
+			rect_width = max(rect_width, info_width + em)
+			next_line(&rect_height, em)
+		}
+	} else if ev.args > 0 {
 		args = in_getstr(&trace.string_block, ev.args)
 		args_width := measure_text(args, .PSize, .DefaultFont)
 		rect_width = max(rect_width, args_width + em)
@@ -609,9 +616,13 @@ draw_rect_tooltip :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) 
 		next_line(&cursor_y, em)
 		draw_text(gfx, args, Vec2{tooltip_start_x, cursor_y}, .PSize, .DefaultFont, text_color)
 	}
-	if len(line_info) > 0 {
+	if len(called_loc) > 0 {
 		next_line(&cursor_y, em)
-		draw_text(gfx, line_info, Vec2{tooltip_start_x, cursor_y}, .PSize, .DefaultFont, text_color)
+		draw_text(gfx, called_loc, Vec2{tooltip_start_x, cursor_y}, .PSize, .DefaultFont, text_color)
+	}
+	if len(defined_loc) > 0 {
+		next_line(&cursor_y, em)
+		draw_text(gfx, defined_loc, Vec2{tooltip_start_x, cursor_y}, .PSize, .DefaultFont, text_color)
 	}
 }
 
@@ -1508,7 +1519,7 @@ draw_stats :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 		draw_text(gfx, trunc_name_str, Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 
 		args_val := LineVal{-1, ""}
-		if ev.args > 0 {
+		if !ev.has_addr && ev.args > 0 {
 			args_str := in_getstr(&trace.string_block, ev.args)
 			args_val = LineVal{y, args_str}
 
@@ -1517,13 +1528,22 @@ draw_stats :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 			draw_text(gfx, disp_str, Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 		}
 
-		loc_val := LineVal{-1, ""}
+		called_val := LineVal{-1, ""}
+		defined_val := LineVal{-1, ""}
 		if ev.has_addr {
-			file, line, ok := get_line_info(trace, ev.id)
+			file, line, ok := get_line_info(trace, ev.args)
 			if ok {
 				loc_str := fmt.tprintf("%s:%d", file, line)
-				line_str := fmt.tprintf("  location: %s", loc_str)
-				loc_val = LineVal{y, loc_str}
+				line_str := fmt.tprintf("  call site: %s", loc_str)
+				called_val = LineVal{y, loc_str}
+				draw_text(gfx, line_str, Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
+			}
+
+			file, line, ok = get_line_info(trace, ev.id)
+			if ok {
+				loc_str := fmt.tprintf("%s:%d", file, line)
+				line_str := fmt.tprintf(" definition: %s", loc_str)
+				defined_val = LineVal{y, loc_str}
 				draw_text(gfx, line_str, Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 			}
 		}
@@ -1532,10 +1552,16 @@ draw_stats :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 		draw_text(gfx, fmt.tprintf("  duration: %s", time_fmt(disp_time(trace, f64(bound_duration(&ev, thread.max_time))))), Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 		draw_text(gfx, fmt.tprintf(" self time: %s", time_fmt(disp_time(trace, f64(ev.self_time)))), Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 
-		if loc_val.y != -1 {
-			if button(gfx, Rect{stats_pane_x, loc_val.y, button_height, button_width}, 
-					  "\uf0ea", "Copy Location", .IconFont, 0, ui_state.width) {
-				set_clipboard(gfx, loc_val.str)
+		if called_val.y != -1 {
+			if button(gfx, Rect{stats_pane_x, called_val.y, button_height, button_width}, 
+					  "\uf0ea", "Copy Called At", .IconFont, 0, ui_state.width) {
+				set_clipboard(gfx, called_val.str)
+			}
+		}
+		if defined_val.y != -1 {
+			if button(gfx, Rect{stats_pane_x, defined_val.y, button_height, button_width}, 
+					  "\uf0ea", "Copy Defined At", .IconFont, 0, ui_state.width) {
+				set_clipboard(gfx, defined_val.str)
 			}
 		}
 		if args_val.y != -1 {
