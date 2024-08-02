@@ -5,9 +5,9 @@ import "core:sync"
 import "core:fmt"
 import "core:prof/spall"
 
-TaskProc :: proc(pool: ^Pool, data: rawptr)
+Pool_TaskProc :: proc(pool: ^Pool, data: rawptr)
 Pool_Task :: struct {
-	do_work: TaskProc,
+	do_work: Pool_TaskProc,
 	args: rawptr,
 }
 
@@ -29,10 +29,9 @@ Pool :: struct {
 	tasks_left: sync.Futex,
 }
 
-@(thread_local)
-current_thread_idx: int
+@(thread_local) current_thread_idx: int
 
-wait_until_success :: proc(f: ^sync.Futex, expected: u32) {
+wait_for_change :: proc(f: ^sync.Futex, expected: u32) {
 	for {
 		sync.futex_wait(f, expected)
 		v := sync.atomic_load(f)
@@ -129,7 +128,8 @@ pool_worker :: proc(ptr: rawptr) {
 		defer spall.buffer_destroy(&spall_ctx, &spall_buffer)
 	}
 
-	work_start: for sync.atomic_load(&pool.running) {
+	work_start: for {
+		if !pool.running { break }
 
 		finished_tasks := 0
 		for {
@@ -175,7 +175,8 @@ pool_worker :: proc(ptr: rawptr) {
 		}
 
 		state := sync.atomic_load(&pool.tasks_available)
-		wait_until_success(&pool.tasks_available, u32(state))
+		if !pool.running { break }
+		wait_for_change(&pool.tasks_available, u32(state))
 	}
 }
 
@@ -203,7 +204,7 @@ pool_wait :: proc(pool: ^Pool) {
 			break
 		}
 
-		wait_until_success(&pool.tasks_left, u32(remaining_tasks))
+		wait_for_change(&pool.tasks_left, u32(remaining_tasks))
 	}
 }
 
@@ -236,4 +237,79 @@ pool_destroy :: proc(pool: ^Pool) {
 		}
 		delete(pool.threads)
 	}
+}
+
+Loader_TaskProc :: proc(loader: ^Loader, data: rawptr)
+Loader_Task :: struct {
+	do_work: Loader_TaskProc,
+	args: rawptr,
+}
+
+Loader :: struct {
+	running: bool,
+
+	has_task: sync.Futex,
+	done:     sync.Futex,
+
+	task: Loader_Task,
+	thread_count: int,
+	pool: Pool,
+
+	thrd: ^thread.Thread,
+}
+
+loader_worker :: proc(ptr: rawptr) {
+	loader := cast(^Loader)ptr
+
+	pool_init(&loader.pool, loader.thread_count)
+
+	for loader.running {
+		has_task := sync.atomic_load(&loader.has_task)
+		if has_task == 1 {
+			loader.task.do_work(loader, loader.task.args)
+			sync.atomic_store(&loader.has_task, 0)
+			sync.futex_signal(&loader.has_task)
+		}
+
+		if !loader.running { break }
+		wait_for_change(&loader.has_task, 0)
+	}
+
+	pool_wait(&loader.pool)
+	pool_destroy(&loader.pool)
+
+	sync.atomic_store(&loader.done, 1)
+	sync.futex_signal(&loader.done)
+}
+
+loader_init :: proc(loader: ^Loader, thread_count: int) {
+	loader^ = Loader{
+		running = true,
+		done = 0,
+		thread_count = thread_count,
+	}
+	loader.thrd = thread.create_and_start_with_data(loader, loader_worker)
+}
+
+loader_load_file :: proc(loader: ^Loader, task: Loader_Task) {
+	loader.task = task
+	sync.atomic_store(&loader.has_task, 1)
+	sync.futex_signal(&loader.has_task)
+}
+
+loader_wait :: proc(loader: ^Loader) {
+	wait_for_change(&loader.has_task, 1)
+}
+
+loader_destroy :: proc(loader: ^Loader) {
+	loader.running = false
+	sync.atomic_store(&loader.has_task, 1)
+	sync.futex_signal(&loader.has_task)
+
+	done := sync.atomic_load(&loader.done)
+	if done == 0 {
+		wait_for_change(&loader.done, 0)
+	}
+
+	thread.join(loader.thrd)
 }

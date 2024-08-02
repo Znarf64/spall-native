@@ -313,7 +313,7 @@ draw_reduced_header :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState
 			if ok {
 				ui_state.ui_mode = .TraceView
 				start_trace = filename
-				load_config(&global_pool, trace, ui_state)
+				load_config(&loader, trace, ui_state)
 			}
 		}
 		cursor_x += button_width + button_pad
@@ -399,7 +399,7 @@ draw_header :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 			filename, ok := open_file_dialog()
 			if ok {
 				start_trace = filename
-				load_config(&global_pool, trace, ui_state)
+				load_config(&loader, trace, ui_state)
 			}
 		}
 		cursor_x += button_width + button_pad
@@ -2335,7 +2335,7 @@ draw_errorbox :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 	draw_text(gfx, trace.error_message, Vec2{(error_rect.x + (error_rect.w / 2)) - (msg_width / 2), (error_rect.y + (error_rect.h / 2)) - (msg_height / 2)}, .PSize, .DefaultFont, text_color)
 }
 
-draw_trace :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState, global_pool: ^Pool, dt: f64) {
+draw_trace :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState, loader: ^Loader, dt: f64) {
 		rect_tooltip_rect = empty_event
 		rect_tooltip_pos = Vec2{}
 		rendered_rect_tooltip = false
@@ -2356,7 +2356,7 @@ draw_trace :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState, global_
 		// FIXME(will) this is kinda gross
 		// load_config gets triggered when start_trace is set
 		if start_trace != "" && !ui_state.loading_config {
-			load_config(global_pool, trace, ui_state)
+			load_config(loader, trace, ui_state)
 		}
 
 		if ui_state.loading_config {

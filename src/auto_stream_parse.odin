@@ -62,11 +62,11 @@ as_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, threa
 		d_addr   := pull_uval(chunk[chunk_pos(p)+i:], int(addr_size));   i += addr_size
 		d_caller := pull_uval(chunk[chunk_pos(p)+i:], int(caller_size)); i += caller_size
 
-		current_time^ = current_time^ + i64(dt)
-		current_addr^ = current_addr^ ~ d_addr
+		current_time^   = current_time^ + i64(dt)
+		current_addr^   = current_addr^ ~ d_addr
 		current_caller^ = current_caller^ ~ d_caller
 
-		id := current_addr^
+		id        := current_addr^
 		caller_id := current_caller^
 		timestamp := current_time^
 

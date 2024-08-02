@@ -75,7 +75,6 @@ build_hash := 0
 enable_debug := false
 fps_history: queue.Queue(f64)
 lru_text_cache: lru.Cache(LRU_Key, LRU_Text)
-global_pool := Pool{}
 
 
 fullscreen := false
@@ -94,6 +93,7 @@ random_seed     : u64
 
 // loading / trace state
 start_trace := ""
+loader := Loader{}
 
 // gl-rect nonsense
 idx_pos := [?]glm.vec2{
@@ -147,7 +147,7 @@ ThreadFileLoadState :: struct {
 	ui_state: ^UIState,
 }
 
-threaded_config_load :: proc(pool: ^Pool, data: rawptr) {
+threaded_config_load :: proc(loader: ^Loader, data: rawptr) {
 	state := cast(^ThreadFileLoadState)(data)
 
 	trace := state.trace
@@ -166,7 +166,7 @@ threaded_config_load :: proc(pool: ^Pool, data: rawptr) {
 }
 
 
-load_config :: proc(pool: ^Pool, trace: ^Trace, ui_state: ^UIState) -> bool {
+load_config :: proc(loader: ^Loader, trace: ^Trace, ui_state: ^UIState) -> bool {
 	if ui_state.loading_config {
 		return false
 	}
@@ -187,7 +187,7 @@ load_config :: proc(pool: ^Pool, trace: ^Trace, ui_state: ^UIState) -> bool {
 	// it checks if start_trace is non
 	start_trace = ""
 
-	pool_add_task(pool, Pool_Task{threaded_config_load, state})
+	loader_load_file(loader, Loader_Task{threaded_config_load, state})
 	return true
 }
 
@@ -234,9 +234,7 @@ main :: proc() {
 	}
 
 	thread_count := max(os.processor_core_count() - 1, 1)
-	//thread_count := 1
-	pool_init(&global_pool, thread_count)
-
+	loader_init(&loader, thread_count)
 	trace := new(Trace)
 	init_trace(trace)
 
@@ -245,12 +243,11 @@ main :: proc() {
 			return
 		}
 
-		ok := load_config(&global_pool, trace, &ui_state)
-		if !ok {
-			return
-		}
-
-		pool_wait(&global_pool)
+		ok := load_config(&loader, trace, &ui_state)
+		if !ok { return }
+		loader_wait(&loader)
+		loader_destroy(&loader)
+		
 		return
 	}
 
@@ -603,7 +600,7 @@ main :: proc() {
 
 		#partial switch ui_state.ui_mode {
 			case .MainMenu: draw_main_menu(&gfx, trace, &ui_state, dt)
-			case .TraceView: draw_trace(&gfx, trace, &ui_state, &global_pool, dt)
+			case .TraceView: draw_trace(&gfx, trace, &ui_state, &loader, dt)
 		}
 
 		// reset the cursor if we're not over a selectable thing
@@ -633,8 +630,7 @@ main :: proc() {
 	}
 
 	when SELF_TRACE || GOOD_BOY_MODE {
-		pool_wait(&global_pool)
-		pool_destroy(&global_pool)
+		loader_destroy(&loader)
 	}
 
 	when GOOD_BOY_MODE {
