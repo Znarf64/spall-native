@@ -632,6 +632,9 @@ load_file :: proc(loader: ^Loader, trace: ^Trace, file_name: string) {
 		fmt.printf("runtime address of \"spall_auto_init\": 0x%08x\n", trace.skew_address)
 
 		symbol_path := string(header_buffer[size_of(spall_fmt.Auto_Header):][:hdr.program_path_len])
+		if (opt.symbol_path != "") {
+			symbol_path = opt.symbol_path
+		}
 		header_size = size_of(spall_fmt.Auto_Header) + i64(hdr.program_path_len)
 
 		sym_args := new(Load_Symbols_Args)

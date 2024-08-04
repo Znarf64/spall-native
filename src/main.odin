@@ -10,6 +10,7 @@ import "core:mem"
 import "core:strings"
 import "core:math"
 import "core:slice"
+import "core:flags"
 import "core:container/queue"
 import "core:container/lru"
 import "core:unicode/utf8"
@@ -201,9 +202,8 @@ spall_ctx: spall.Context
 @(thread_local) spall_buffer: spall.Buffer
 
 SELF_TRACE :: false
-FULL_SPEED :: false
 GOOD_BOY_MODE :: false
-terminal_mode := false
+opt := Cmd_Options{}
 
 when SELF_TRACE {
 	@(instrumentation_enter)
@@ -217,6 +217,13 @@ when SELF_TRACE {
 	}
 }
 
+Cmd_Options :: struct {
+	file: string `args:"pos=0" usage:"Trace file to load"`,
+	terminal_mode: bool `args:"hidden, name=terminal-mode" usage:"Loads traces headlessly"`,
+	full_speed: bool `args:"hidden, name=full-speed" usage:"Disables power-limiter to max out framerate"`,
+	symbol_path: string `args:"name=symbol-path" usage:"Overrides symbol path for trace files"`,
+}
+
 main :: proc() {
 	when SELF_TRACE {
 		current_time := time.time_to_unix(time.now())
@@ -228,6 +235,9 @@ main :: proc() {
 		spall_buffer = spall.buffer_create(buffer_backing)
 		defer spall.buffer_destroy(&spall_ctx, &spall_buffer)
 	}
+
+	flags.parse_or_exit(&opt, os.args, .Unix)
+
 	clicked_t = time.tick_now()
 	ui_state := UIState{
 		ui_mode = .TraceView,
@@ -244,9 +254,8 @@ main :: proc() {
 	second.next = first
 	second.prev = first
 
-	// If the user passed us a trace, save off the filename now
-	if len(os.args) == 2 {
-		start_trace = strings.clone(os.args[1])
+	if opt.file != "" {
+		start_trace = strings.clone(opt.file)
 		ui_state.ui_mode = .TraceView
 	}
 
@@ -255,7 +264,7 @@ main :: proc() {
 	trace := new(Trace)
 	init_trace(trace)
 
-	if terminal_mode {
+	if opt.terminal_mode {
 		if start_trace == "" {
 			return
 		}
@@ -666,7 +675,7 @@ should_sleep :: proc(cam: ^Camera, ui_state: ^UIState) -> bool {
 	SCALE_EPSILON :: 0.01
 	SCROLL_EPSILON :: 0.01
 
-	if FULL_SPEED {
+	if opt.full_speed {
 		return false
 	}
 

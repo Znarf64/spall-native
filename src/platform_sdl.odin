@@ -171,7 +171,7 @@ create_context :: proc(title: cstring, width, height: int) -> (GFX_Context, f64,
 		os.exit(1)
 	}
 
-	if FULL_SPEED {
+	if opt.full_speed {
 		SDL.GL_SetSwapInterval(0)
 	} else {
 		SDL.GL_SetSwapInterval(-1)
