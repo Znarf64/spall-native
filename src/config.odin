@@ -628,8 +628,8 @@ load_file :: proc(loader: ^Loader, trace: ^Trace, file_name: string) {
 		}
 		
 		trace.stamp_scale = hdr.timestamp_unit
-		trace.skew_address = hdr.known_address
-		fmt.printf("runtime address of \"spall_auto_init\": 0x%08x\n", trace.skew_address)
+		trace.base_address = hdr.base_address
+		fmt.printf("Base address of executable: 0x%08x\n", trace.base_address)
 
 		symbol_path := string(header_buffer[size_of(spall_fmt.Auto_Header):][:hdr.program_path_len])
 		if (opt.exe_path != "") {
@@ -735,7 +735,7 @@ get_function :: proc(trace: ^Trace, _addr: u64) -> (u64, bool) {
 		return 0, false
 	}
 
-	addr := _addr - trace.skew_size
+	addr := _addr - trace.base_address
 
 	low_pc := trace.functions[0].low_pc
 	high_pc := trace.functions[len(trace.functions)-1].high_pc
@@ -777,7 +777,7 @@ get_line_info :: proc(trace: ^Trace, _addr: u64) -> (string, u64, bool) {
 		return "", 0, false
 	}
 
-	addr := _addr - trace.skew_size
+	addr := _addr - trace.base_address
 
 	line_info_start := trace.line_info[0].address
 	line_info_end := trace.line_info[len(trace.line_info)-1].address

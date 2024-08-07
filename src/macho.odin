@@ -127,9 +127,6 @@ load_macho_symbols :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 
 		sym_idx := in_get(&trace.intern, &trace.string_block, demangled_name)
 		non_zero_append(&trace.functions, Function{name = sym_idx, low_pc = symbol.value, high_pc = symbol.value})
-		if trace.skew_size == 0 && (symbol_name == "spall_auto_init" || symbol_name == "_spall_auto_init") {
-			trace.skew_size = trace.skew_address - symbol.value
-		}
 	}
 
 	return true
@@ -152,6 +149,7 @@ load_macho_debug :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 	ranges_section    := Mach_Section{}
 	found_debug := 0
 
+	text_skew : u64 = 0
 	read_idx := size_of(Mach_Header_64)
 	for read_idx < len(exec_buffer) {
 		current_buffer := exec_buffer[read_idx:]
@@ -163,6 +161,10 @@ load_macho_debug :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 		if cmd.type == MACH_CMD_SEGMENT_64 {
 			segment_header := slice_to_type(exec_buffer[read_idx:], Mach_Segment_64_Command) or_return
 			segment_name := strings.string_from_null_terminated_ptr(raw_data(segment_header.name[:]), 16)
+			if segment_name == "__TEXT" {
+				text_skew = segment_header.address
+			}
+
 			if segment_name == "__DWARF" {
 
 				sub_idx := read_idx + size_of(Mach_Segment_64_Command)
@@ -193,6 +195,11 @@ load_macho_debug :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 	if found_debug < 4 {
 		return false
 	}
+	if text_skew == 0 {
+		return false
+	}
+
+	trace.base_address -= text_skew
 
 	sections := Sections{}
 	sections.abbrev    = create_subbuffer(exec_buffer, u64(abbrev_section.offset), abbrev_section.size) or_return

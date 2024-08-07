@@ -304,7 +304,7 @@ Trace :: struct {
 	intern: INMap,
 	string_block: [dynamic]string,
 
-	skew_address:                u64,
+	base_address:                u64,
 	skew_size:                   u64,
 	filename_map:     strings.Intern,
 	line_info:    [dynamic]Line_Info,

@@ -161,12 +161,14 @@ load_pe32 :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 	section_buffer := rdr.buffer[rdr.idx:]
 	section_bytes := (size_of(COFF_Section_Header) * int(pe_hdr.coff_header.section_count))
 
+	might_have_pdb := true
 	debug_rva := pe_hdr.optional_header.data_directories[DEBUG_DIR].virtual_addr
 	debug_size := pe_hdr.optional_header.data_directories[DEBUG_DIR].size
+	if debug_rva == 0 {
+		might_have_pdb = false
+	}
 
-	might_have_pdb := true
 	sections := Sections{}
-
 	for i := 0; i < int(pe_hdr.coff_header.section_count); i += 1 {
 
 		sect_rdr := stream_init(section_buffer[:section_bytes], i * size_of(COFF_Section_Header))
@@ -179,7 +181,6 @@ load_pe32 :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 			pdb_path = path
 			break
 		}
-
 
 		section_name := string(section_hdr.name[:])
 		if section_name[0] == '/' {

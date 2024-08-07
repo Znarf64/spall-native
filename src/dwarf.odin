@@ -1480,9 +1480,7 @@ load_dwarf :: proc(trace: ^Trace, sections: ^Sections) -> bool {
 			fmt.printf("Only supporting DWARF32 for now!\n")
 			return false 
 		}
-		if unit_length == 0 {
-			break
-		}
+		if unit_length == 0 { break }
 		next_offset := 4 + unit_length
 
 		ctx.bits_32 = true
@@ -1642,12 +1640,6 @@ load_dwarf :: proc(trace: ^Trace, sections: ^Sections) -> bool {
 
 		cur_cu_offset = next_cu_offset
 	}
-	if trace.skew_size == 0 {
-		fmt.printf("Could not find \"spall_auto_init\" to address skew?\n")
-		return false
-	}
-
-	fmt.printf("Found skew: 0x%x\n", trace.skew_size)
 
 	fmt.printf("DWARF: sorting lines\n")
 	for &cu, c_idx in cu_files_list {
@@ -1669,6 +1661,11 @@ load_dwarf :: proc(trace: ^Trace, sections: ^Sections) -> bool {
 		return a.low_pc < b.low_pc
 	}
 	slice.sort_by(trace.functions[:], func_order)
+/*
+	for func in trace.functions {
+		fmt.printf("%s - 0x%08x -> 0x%08x\n", in_getstr(&trace.string_block, func.name), func.low_pc, func.high_pc)
+	}
+*/
 
 	return true
 }

@@ -14,7 +14,7 @@ Auto_Header :: struct #packed {
 	magic:          u64,
 	version:        u64,
 	timestamp_unit: f64,
-	known_address:  u64,
+	base_address:   u64,
 	program_path_len: u16,
 }
 

@@ -138,7 +138,7 @@ extern "C" {
     #define Spall_Atomic(X) _Atomic (X)
 #endif
 
-#define SPALL_FN static SPALL_NOINSTRUMENT
+#define SPALL_FN SPALL_NOINSTRUMENT
 
 #if SPALL_IS_X64
 #include <x86intrin.h>
@@ -165,7 +165,7 @@ typedef struct SpallHeader {
     uint64_t magic_header; // = 0xABADF00D
     uint64_t version; // = 2
     double   timestamp_unit;
-    uint64_t known_address; // Address for spall_auto_init, for skew-correction
+    uint64_t base_address;
     uint16_t program_path_len;
 } SpallHeader;
 
@@ -255,6 +255,21 @@ typedef struct SpallBuffer {
 #include <linux/futex.h>
 #include <linux/limits.h>
 #include <linux/perf_event.h>
+
+SPALL_FN uint64_t spall_auto_get_base_address(void) {
+	int AT_BASE = 7;
+
+	uint64_t base = getauxval(AT_BASE);
+	if (base != 0) {
+		return base;
+	}
+
+	int AT_PHDR = 3;
+	uint64_t phdr = getauxval(AT_PHDR);
+
+	int ELF64_EHDR_SIZE = 64;
+	return phdr - ELF64_EHDR_SIZE;
+}
 
 SPALL_FN bool get_program_path(char **out_path) {
     char path[PATH_MAX] = {0};
@@ -347,9 +362,15 @@ SPALL_FN SPALL_FORCE_INLINE void spall_wait(Spall_Futex *addr, uint64_t val) {
 
 #elif SPALL_IS_DARWIN
 
+#include <mach-o/ldsyms.h>
 #include <mach-o/dyld.h>
 #include <sys/types.h>
 #include <sys/sysctl.h>
+#include <dlfcn.h>
+
+SPALL_FN uint64_t spall_auto_get_base_address(void) {
+	return (uint64_t)&_mh_execute_header;
+}
 
 #if SPALL_IS_X64
 SPALL_FN double spall_get_clock_multiplier(void) {
@@ -435,6 +456,10 @@ SPALL_FN SPALL_FORCE_INLINE void spall_wait(Spall_Futex *addr, uint64_t val) {
 
 #elif SPALL_IS_WINDOWS
 
+SPALL_FN uint64_t spall_auto_get_base_address(void) {
+	return (uint64_t)GetModuleHandleW(NULL);
+}
+
 SPALL_FN bool get_program_path(char **out_path) {
     char *post_path = (char *)calloc(MAX_PATH, 1);
     if (GetModuleFileNameA(NULL, post_path, MAX_PATH) == 0) {
@@ -485,9 +510,9 @@ SPALL_FN SPALL_FORCE_INLINE void spall_wait(Spall_Futex *addr, uint64_t val) {
 #endif
 
 // Auto-tracing impl
-static SpallProfile spall_ctx;
-static _Thread_local SpallBuffer *spall_buffer = NULL;
-static _Thread_local bool spall_thread_running = false;
+SpallProfile spall_ctx;
+_Thread_local SpallBuffer *spall_buffer = NULL;
+_Thread_local bool spall_thread_running = false;
 
 SPALL_NOINSTRUMENT void spall_auto_set_thread_instrumenting(bool on) {
     spall_thread_running = on;
@@ -765,7 +790,7 @@ SPALL_NOINSTRUMENT SPALL_FORCE_NOINLINE bool spall_auto_init(char *filename) {
     header.magic_header = 0xABADF00D;
     header.version = 2;
     header.timestamp_unit = spall_ctx.stamp_scale;
-    header.known_address = (uint64_t)spall_canonical_addr((void *)spall_auto_init);
+    header.base_address = spall_auto_get_base_address();
 
     char *program_path;
     if (!get_program_path(&program_path)) { return false; }

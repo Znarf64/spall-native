@@ -291,9 +291,6 @@ load_pdb :: proc(trace: ^Trace, section_buffer: []u8, pdb_buffer: []u8) -> bool 
 		return false
 	}
 
-	skew_size : u64 = 0
-	symbol_found := false
-
 	mod_offset := size_of(PDB_DBI_Header)
 	last_mod_info := int(dbi_hdr.mod_info_size) + size_of(PDB_DBI_Header)
 	for ; mod_offset < last_mod_info; {
@@ -338,11 +335,6 @@ load_pdb :: proc(trace: ^Trace, section_buffer: []u8, pdb_buffer: []u8) -> bool 
 					high_pc := low_pc + u64(proc_symbol.proc_length)
 					sym_idx := in_get(&trace.intern, &trace.string_block, symbol_name)
 					non_zero_append(&trace.functions, Function{name = sym_idx, low_pc = low_pc, high_pc = high_pc})
-
-					if !symbol_found && symbol_name == "spall_auto_init" {
-						skew_size = trace.skew_address - low_pc
-						symbol_found = true
-					}
 				}
 			}
 
@@ -420,7 +412,6 @@ load_pdb :: proc(trace: ^Trace, section_buffer: []u8, pdb_buffer: []u8) -> bool 
 		}
 	}
 
-	trace.skew_size = skew_size
 	return true
 }
 
