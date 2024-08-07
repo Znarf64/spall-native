@@ -29,7 +29,7 @@ real_pos :: proc(p: ^Parser) -> i64 { return p.pos }
 chunk_pos :: proc(p: ^Parser) -> i64 { return p.pos - p.offset }
 get_chunk :: proc(p: ^Parser, fd: os.Handle, chunk_buffer: []u8) -> (int, bool) {
 	rd_sz, err2 := os.read_at(fd, chunk_buffer, p.pos)
-	if err2 != 0 {
+	if err2 != nil {
 		return 0, false
 	}
 
@@ -552,14 +552,14 @@ load_file :: proc(loader: ^Loader, trace: ^Trace, file_name: string) {
 	init_trace_allocs(trace, file_name)
 
 	trace_fd, err := os.open(file_name)
-	if err != 0 {
+	if err != nil {
 		post_error(trace, "%s not found!", file_name)
 		return
 	}
 	defer os.close(trace_fd)
 
 	total_size, err2 := os.file_size(trace_fd)
-	if err2 != 0 {
+	if err2 != nil {
 		post_error(trace, "unable to get file size!")
 		return
 	}
@@ -572,7 +572,7 @@ load_file :: proc(loader: ^Loader, trace: ^Trace, file_name: string) {
 
 	header_buffer := [0x4000]u8{}
 	rd_sz, err3 := os.read_at(trace_fd, header_buffer[:], 0)
-	if err3 != 0 {
+	if err3 != nil {
 		post_error(trace, "Unable to read %s!", file_name)
 		return
 	}

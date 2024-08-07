@@ -117,7 +117,7 @@ ms_v1_parse :: proc(trace: ^Trace, fd: os.Handle, header_size: i64) -> bool {
 	defer delete(chunk_buffer)
 
 	read_size, err := os.read_at(fd, chunk_buffer, 0)
-	if err != 0 {
+	if err != nil {
 		post_error(trace, "Unable to read file!")
 		return false
 	}
@@ -372,7 +372,7 @@ ms_v2_parse :: proc(trace: ^Trace, fd: os.Handle, header_size: i64) -> bool {
 	defer delete(chunk_buffer)
 
 	read_size, err := os.read_at(fd, chunk_buffer, 0)
-	if err != 0 {
+	if err != nil {
 		post_error(trace, "Unable to read file!")
 		return false
 	}
