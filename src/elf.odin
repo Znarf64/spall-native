@@ -684,7 +684,7 @@ load_elf :: proc(trace: ^Trace, binary_blob: []u8) -> bool {
 
 			for i := 0; i < len(dyn_section); i += dyn_size {
 				dyn_entry := parse_dynamic(&ctx, dyn_section[i:]) or_return
-				if Dynamic_Type(dyn_entry.tag) == .flags_1 && Dyn_Flags(dyn_entry.val) == .pie {
+				if Dynamic_Type(dyn_entry.tag) == .flags_1 && (dyn_entry.val & u64(Dyn_Flags.pie) != 0) {
 					use_aslr = true
 				}
 			}
@@ -734,6 +734,13 @@ load_elf :: proc(trace: ^Trace, binary_blob: []u8) -> bool {
 		sym_idx := in_get(&trace.intern, &trace.string_block, demangled_name)
 		non_zero_append(&trace.functions, Function{name = sym_idx, low_pc = u64(symbol.value), high_pc = u64(symbol.value)})
 	}
+
+	// This is apparently a thing in Old Linux?
+	// file does this to determine if things are PIE before the PIE flag was invented
+	if !use_aslr && ctx.file_type == .shared_obj {
+		use_aslr = true
+	}
+
 	if !use_aslr {
 		fmt.printf("ELF: Your binary is not relocatable, disabling ASLR correction\n")
 		trace.base_address = 0

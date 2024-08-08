@@ -546,7 +546,7 @@ SPALL_FN void *spall_writer(void *arg) {
 #endif
 }
 
-SPALL_FN SPALL_FORCE_INLINE bool spall__file_write(void *p, size_t n) {
+SPALL_NOINSTRUMENT SPALL_FORCE_INLINE bool spall__file_write(void *p, size_t n) {
     atomic_store(&spall_buffer->writer.size, n);
     atomic_store(&spall_buffer->writer.ptr, (uint64_t)p);
     spall_signal(&spall_buffer->writer.ptr);
