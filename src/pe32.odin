@@ -18,6 +18,7 @@ DOS_MAGIC  := []u8{ 0x4d, 0x5a }
 PE32_MAGIC := []u8{ 'P', 'E', 0, 0 }
 
 DEBUG_TYPE_CODEVIEW :: 2
+DLL_FLAGS_DYNAMIC_BASE :: 0x40
 
 COFF_Header :: struct #packed {
 	machine:              u16,
@@ -154,6 +155,12 @@ load_pe32 :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 		return false
 	}
 
+	
+	use_aslr := false
+	if (pe_hdr.optional_header.dll_flags & DLL_FLAGS_DYNAMIC_BASE) != 0 {
+		use_aslr = true
+	}
+
 	string_table_offset := pe_hdr.coff_header.symbol_table_offset + (pe_hdr.coff_header.symbol_count * size_of(COFF_Symbol))
 	string_table := exec_buffer[string_table_offset:]
 	strtab_size := slice_to_type(string_table, u32) or_return
@@ -211,6 +218,10 @@ load_pe32 :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 		case ".debug_rnglists":
 			sections.rnglists    = create_subbuffer(exec_buffer, start, size) or_return
 		}
+	}
+	if !use_aslr {
+		fmt.printf("PE32: Your binary is not relocatable, disabling ASLR correction\n")
+		trace.base_address = 0
 	}
 
 	// I think we've got a PDB file
