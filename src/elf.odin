@@ -186,12 +186,18 @@ Dynamic_Type :: enum {
 	init_array_size  = 26,
 	fini_array       = 27,
 	fini_array_size  = 28,
+	rela_count       = 0x6FFFFFF9,
+	flags_1          = 0x6FFFFFFB,
 	gnu_hash         = 0x6FFFFEF5,
 	version_symbol   = 0x6FFFFFF0,
 	version_need     = 0x6FFFFFFE,
 	version_need_num = 0x6FFFFFFF,
 	lo_proc          = 0x70000000,
 	hi_proc          = 0x7FFFFFFF,
+}
+
+Dyn_Flags :: enum {
+	pie = 0x08000000,
 }
 
 Symbol_Binding :: enum u8 {
@@ -650,6 +656,7 @@ load_elf :: proc(trace: ^Trace, binary_blob: []u8) -> bool {
 	sym_buffer := []u8{}
 	str_buffer := []u8{}
 	sections := Sections{}
+	use_aslr := false
 
 	for i := 0; i < section_header_array_size; i += int(common_hdr.section_entry_size) {
 		section_hdr, sk := parse_section_header(&ctx, section_header_blob[i:])
@@ -671,8 +678,16 @@ load_elf :: proc(trace: ^Trace, binary_blob: []u8) -> bool {
 		size := section_hdr.size
 		section_name := string(cstring(raw_data(section_name_blob)))
 		switch section_name {
-		case ".text":
-			fmt.printf("%s | 0x%08x -> 0x%08x\n", section_name, addr, addr+size)
+		case ".dynamic":
+			dyn_section := create_subbuffer(binary_blob, start, size) or_return
+			dyn_size := get_dynamic_size(&ctx)
+
+			for i := 0; i < len(dyn_section); i += dyn_size {
+				dyn_entry := parse_dynamic(&ctx, dyn_section[i:]) or_return
+				if Dynamic_Type(dyn_entry.tag) == .flags_1 && Dyn_Flags(dyn_entry.val) == .pie {
+					use_aslr = true
+				}
+			}
 		case ".symtab":
 			sym_buffer = create_subbuffer(binary_blob, start, size) or_return
 		case ".strtab":
@@ -718,6 +733,10 @@ load_elf :: proc(trace: ^Trace, binary_blob: []u8) -> bool {
 		}
 		sym_idx := in_get(&trace.intern, &trace.string_block, demangled_name)
 		non_zero_append(&trace.functions, Function{name = sym_idx, low_pc = u64(symbol.value), high_pc = u64(symbol.value)})
+	}
+	if !use_aslr {
+		fmt.printf("ELF: Your binary is not relocatable, disabling ASLR correction\n")
+		trace.base_address = 0
 	}
 
 	// Start parsing DWARF normally from here
