@@ -165,6 +165,8 @@ threaded_config_load :: proc(loader: ^Loader, data: rawptr) {
 	fmt.printf("trace length: %s\n", time_fmt(disp_time(trace, f64(trace.total_max_time - trace.total_min_time))))
 
 	pool_wait(&loader.pool)
+	free_trace_temps(trace)
+
 	total_duration := time.tick_since(total_time)
 	fmt.printf("full load took: %f ms\n", time.duration_milliseconds(total_duration))
 

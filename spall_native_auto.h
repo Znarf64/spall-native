@@ -93,6 +93,9 @@ void spall_auto_set_thread_instrumenting(bool on);
     #else
         #include <stdatomic.h>
     #endif
+#else
+    #pragma comment(lib, "Synchronization")
+    #include <stdatomic.h>
 #endif
 
 #ifdef __cplusplus

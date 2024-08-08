@@ -676,8 +676,10 @@ load_file :: proc(loader: ^Loader, trace: ^Trace, file_name: string) {
 		post_error(trace, "Trace is empty, did you remember to quit your threads and enable -finstrument-functions?")
 	}
 
-	free_trace_temps(trace)
 	if !parsed_properly {
+		pool_wait(&loader.pool)
+
+		free_trace_temps(trace)
 		error_temp := trace.error_storage
 		error_str_len := len(trace.error_message)
 
