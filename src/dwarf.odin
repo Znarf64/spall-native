@@ -905,6 +905,11 @@ parse_die :: proc(ctx: ^DWARF_Context, rdr: ^Stream_Context, abbrevs: []Abbrev_U
 	return int(abbrev_idx), .Pass
 }
 
+add_func :: proc(functions: ^[dynamic]Function, sym_idx: u64, low_pc: u64, high_pc: u64) {
+	real_high := max(low_pc, high_pc - 1)
+	non_zero_append(functions, Function{name = sym_idx, low_pc = low_pc, high_pc = real_high})
+}
+
 parse_range_table :: proc(ctx: ^DWARF_Context, cu: ^CU_Unit, val: Attr_Data, sym_idx: u64, functions: ^[dynamic]Function) -> (ok: bool) {
 	new_low := max(u64)
 
@@ -961,7 +966,7 @@ parse_range_table :: proc(ctx: ^DWARF_Context, cu: ^CU_Unit, val: Attr_Data, sym
 				low_pc := read_debug_addr(ctx, cu, start_idx) or_return
 				high_pc := read_debug_addr(ctx, cu, end_idx) or_return
 
-				non_zero_append(functions, Function{name = sym_idx, low_pc = low_pc, high_pc = high_pc})
+				add_func(functions, sym_idx, low_pc, high_pc)
 
 			case .startx_length:
 				start_idx := stream_uleb(&rdr) or_return
@@ -969,13 +974,13 @@ parse_range_table :: proc(ctx: ^DWARF_Context, cu: ^CU_Unit, val: Attr_Data, sym
 
 				low_pc := read_debug_addr(ctx, cu, start_idx) or_return
 
-				non_zero_append(functions, Function{name = sym_idx, low_pc = low_pc, high_pc = low_pc + length})
+				add_func(functions, sym_idx, low_pc, low_pc + length)
 
 			case .offset_pair:
 				low_pc  := stream_uleb(&rdr) or_return
 				high_pc := stream_uleb(&rdr) or_return
 
-				non_zero_append(functions, Function{name = sym_idx, low_pc = base_addr + low_pc, high_pc = base_addr + high_pc})
+				add_func(functions, sym_idx, base_addr + low_pc, base_addr + high_pc)
 
 			case .base_address:
 				addr := stream_val(&rdr, u64) or_return
@@ -985,13 +990,13 @@ parse_range_table :: proc(ctx: ^DWARF_Context, cu: ^CU_Unit, val: Attr_Data, sym
 				low_pc := stream_val(&rdr, u64) or_return
 				high_pc := stream_val(&rdr, u64) or_return
 				
-				non_zero_append(functions, Function{name = sym_idx, low_pc = low_pc, high_pc = high_pc})
+				add_func(functions, sym_idx, low_pc, high_pc)
 
 			case .start_length:
 				addr := stream_val(&rdr, u64) or_return
 				length := stream_uleb(&rdr) or_return
 
-				non_zero_append(functions, Function{name = sym_idx, low_pc = addr, high_pc = addr + length})
+				add_func(functions, sym_idx, addr, addr + length)
 				
 			case:
 				fmt.printf("unhandled range type: %v\n", type)
@@ -1023,7 +1028,7 @@ parse_range_table :: proc(ctx: ^DWARF_Context, cu: ^CU_Unit, val: Attr_Data, sym
 				base_addr = high_pc
 			}
 			
-			non_zero_append(functions, Function{name = sym_idx, low_pc = base_addr + low_pc, high_pc = base_addr + high_pc})
+			add_func(functions, sym_idx, base_addr + low_pc, base_addr + high_pc)
 		}
 	case:
 		panic("Ranges for DWARF %v not supported!\n", ctx.version)
@@ -1626,7 +1631,7 @@ load_dwarf :: proc(trace: ^Trace, sections: ^Sections) -> bool {
 						fmt.printf("Invalid function range!\n")
 						return false
 					}
-					non_zero_append(&trace.functions, Function{name = sym_idx, low_pc = low_pc, high_pc = high_pc})
+					add_func(&trace.functions, sym_idx, low_pc, high_pc)
 				} else {
 					ranges_val := get_attr(attr_scratch[:], .ranges)
 					if ranges_val != nil {

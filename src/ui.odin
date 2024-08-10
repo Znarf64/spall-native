@@ -1508,6 +1508,7 @@ draw_stats :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 
 		called_val := LineVal{-1, ""}
 		defined_val := LineVal{-1, ""}
+		addr_val    := LineVal{-1, ""}
 		if ev.has_addr {
 			file, line, ok := get_line_info(trace, ev.args)
 			if ok {
@@ -1523,6 +1524,12 @@ draw_stats :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 				line_str := fmt.tprintf(" definition: %s", loc_str)
 				defined_val = LineVal{y, loc_str}
 				draw_text(gfx, line_str, Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
+			}
+
+			if enable_debug {
+				addr_str := fmt.tprintf("   address: 0x%08x", ev.id - trace.base_address)
+				addr_val = LineVal{y, addr_str}
+				draw_text(gfx, addr_str, Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 			}
 		}
 
@@ -1551,6 +1558,12 @@ draw_stats :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 		if button(gfx, Rect{stats_pane_x, text_val.y, button_height, button_width}, 
 				  "\uf0ea", "Copy Function Name", .IconFont, 0, ui_state.width) {
 			set_clipboard(gfx, text_val.str)
+		}
+		if addr_val.y != -1 {
+			if button(gfx, Rect{stats_pane_x, addr_val.y, button_height, button_width}, 
+					  "\uf0ea", "Copy Address", .IconFont, 0, ui_state.width) {
+				set_clipboard(gfx, addr_val.str)
+			}
 		}
 
 		// If we've got stats cooking already
