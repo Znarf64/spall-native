@@ -45,9 +45,10 @@ ColorMode :: enum {
 
 default_colors :: proc "contextless" (is_dark: bool) {
 	loading_block_color  = BVec4{100, 194, 236, 255}
-
-	error_color = BVec4{0xFF, 0x3F, 0x83, 255}
-	test_color = BVec4{255, 10, 10, 255}
+	error_color          = hex_to_bvec(0xFFe92f42)
+	test_color           = BVec4{255, 10, 10, 255}
+	toolbar_color        = hex_to_bvec(0xFF0077b6)
+	wide_rect_color      = BVec4{0x9b, 0xe9, 0x28, 0}
 
 	// dark mode
 	if is_dark {
@@ -64,13 +65,11 @@ default_colors :: proc "contextless" (is_dark: bool) {
 		subbar_color         = BVec4{0x33, 0x33, 0x33, 255}
 		subbar_split_color   = BVec4{0x50, 0x50, 0x50, 255}
 		toolbar_button_color = BVec4{40, 40, 40, 255}
-		toolbar_color        = BVec4{0x00, 0x83, 0xb7, 255}
 		toolbar_text_color   = BVec4{0xF5, 0xF5, 0xF5, 255}
 		tabbar_color         = BVec4{0x3A, 0x3A, 0x3A, 255}
 
 		graph_color      = BVec4{180, 180, 180, 255}
 		highlight_color  = BVec4{ 64,  64, 255,   7}
-		wide_rect_color  = BVec4{  0, 255,   0,   0}
 		wide_bg_color    = BVec4{  0,   0,   0, 255}
 		shadow_color     = BVec4{  0,   0,   0, 120}
 
@@ -97,12 +96,10 @@ default_colors :: proc "contextless" (is_dark: bool) {
 		subbar_split_color   = BVec4{150, 150, 150, 255}
 		tabbar_color         = BVec4{220, 215, 210, 255}
 		toolbar_button_color = BVec4{40, 40, 40, 255}
-		toolbar_color        = BVec4{0x00, 0x83, 0xb7, 255}
 		toolbar_text_color   = BVec4{0xF5, 0xF5, 0xF5, 255}
 
 		graph_color      = BVec4{69,   49,  34, 255}
 		highlight_color  = BVec4{255, 255,   0,  64}
-		wide_rect_color  = BVec4{  0, 255,   0,   0}
 		wide_bg_color    = BVec4{  0,  0,    0, 255}
 		shadow_color     = BVec4{  0,   0,   0,  30}
 
@@ -135,8 +132,19 @@ name_color_idx :: proc(name_idx: u64) -> u64 {
 }
 
 generate_color_choices :: proc(trace: ^Trace) {
-	for i := 0; i < COLOR_CHOICES; i += 1 {
+	trace.color_choices[0] = hex_to_fvec(0x6faadc)
+	trace.color_choices[1] = hex_to_fvec(0xF1B212)
+	trace.color_choices[2] = hex_to_fvec(0x8bd124)
+	trace.color_choices[3] = hex_to_fvec(0xae74da)
+	trace.color_choices[4] = hex_to_fvec(0xf07481)
 
+	presets := 5
+	for i := presets; i < COLOR_CHOICES; i += 1 {
+		trace.color_choices[i] = trace.color_choices[i - presets]
+	}
+
+/*
+	for i := 0; i < COLOR_CHOICES; i += 1 {
 		h := rand.float32() * 0.5 + 0.5
 		h *= h
 		h *= h
@@ -146,6 +154,7 @@ generate_color_choices :: proc(trace: ^Trace) {
 
 		trace.color_choices[i] = hsv2rgb(FVec3{h, s, v}) * 255
 	}
+*/
 }
 
 hsv2rgb :: proc(c: FVec3) -> FVec3 {
@@ -165,10 +174,25 @@ hex_to_bvec :: proc "contextless" (v: u32) -> BVec4 {
 	return BVec4{r, g, b, a}
 }
 
+hex_to_fvec :: proc "contextless" (v: u32) -> FVec3 {
+	r := u8(v >> 16)
+	g := u8(v >> 8)
+	b := u8(v >> 0)
+
+	return FVec3{f32(r), f32(g), f32(b)}
+}
+
 bvec_to_fvec :: proc "contextless" (c: BVec4) -> FVec3 {
 	return FVec3{f32(c.r), f32(c.g), f32(c.b)}
 }
 
 greyscale :: proc "contextless" (c: FVec3) -> FVec3 {
 	return (c.x * 0.299) + (c.y * 0.587) + (c.z * 0.114)
+}
+
+adjust :: proc(c: FVec3, by: f32) -> FVec3 {
+	r := max(min(255, c.r + by), 0)
+	g := max(min(255, c.g + by), 0)
+	b := max(min(255, c.b + by), 0)
+	return FVec3{r, g, b}
 }

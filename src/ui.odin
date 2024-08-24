@@ -839,9 +839,7 @@ draw_flamegraphs :: proc(gfx: ^GFX_Context, trace: ^Trace, start_time, end_time:
 							   int(trace.stats.selected_event.tid) == t_idx &&
 							   int(trace.stats.selected_event.did) == d_idx &&
 							   int(trace.stats.selected_event.eid) == e_idx {
-								rect_color.x += 30
-								rect_color.y += 30
-								rect_color.z += 30
+								rect_color = adjust(rect_color, 40)
 							}
 
 							draw_rect(gfx, dr, BVec4{u8(rect_color.x), u8(rect_color.y), u8(rect_color.z), 255})
