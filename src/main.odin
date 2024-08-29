@@ -223,6 +223,8 @@ Cmd_Options :: struct {
 	file: string `args:"pos=0" usage:"Trace file to load"`,
 	terminal_mode: bool `args:"hidden, name=terminal-mode" usage:"Loads traces headlessly"`,
 	full_speed: bool `args:"hidden, name=full-speed" usage:"Disables power-limiter to max out framerate"`,
+	sample_path: string `args:name=sample-path" usage:"Sets sample path"`,
+	sample_args: string `args:name=sample-args" usage:"Sets sample args"`,
 	exe_path: string `args:"name=exe-path" usage:"Overrides exe path for trace files"`,
 	pdb_path: string `args:"name=pdb-path" usage:"Overrides pdb path for trace files"`,
 }
@@ -241,21 +243,7 @@ main :: proc() {
 
 	flags.parse_or_exit(&opt, os.args, .Unix)
 
-	open_mode := UIMode.TraceView
-	// If user set a file on the cmdline
-	if opt.file != "" {
-		start_trace = strings.clone(opt.file)
-	} else {
-
-		// Does the platform support sampling?
-		if supports_sampling() {
-			open_mode = .MainMenu
-		}
-	}
-
-	clicked_t = time.tick_now()
 	ui_state := UIState{
-		ui_mode = open_mode,
 		post_loading = true,
 		textboxes = make(map[TextboxKind]TextboxState),
 	}
@@ -268,6 +256,30 @@ main :: proc() {
 	first.prev = second
 	second.next = first
 	second.prev = first
+
+	open_mode := UIMode.TraceView
+	// If user set a file on the cmdline
+	if opt.file != "" {
+		start_trace = strings.clone(opt.file)
+	} else {
+
+		// Does the platform support sampling?
+		if supports_sampling() {
+			open_mode = .MainMenu
+
+			if opt.sample_path != "" {
+				strings.write_string(&first.b, opt.sample_path)
+				first.cursor = len(opt.sample_path)
+			}
+			if opt.sample_args != "" {
+				strings.write_string(&second.b, opt.sample_args)
+				second.cursor = len(opt.sample_args)
+			}
+		}
+	}
+
+	clicked_t = time.tick_now()
+	ui_state.ui_mode = open_mode
 
 	thread_count := 1//max(os.processor_core_count() - 1, 1)
 	loader_init(&loader, thread_count)

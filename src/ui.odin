@@ -2524,8 +2524,10 @@ draw_main_menu :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState, dt:
 		// TODO replace me with something that respects quote-escapes
 		args := strings.split(program_args, " ")
 
-		if !sample_child(program_name, args) {
-			fmt.printf("Failed to sample child!\n")
+		if !sample_child(trace, program_name, args) {
+			fmt.printf("Failed to sample `%s %v`\n", program_name, args)
+		} else {
+			ui_state.ui_mode = .TraceView
 		}
 	}
 }

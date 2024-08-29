@@ -23,16 +23,23 @@ Mach_Send_Msg :: struct {
 	task_port: darwin.mach_msg_port_descriptor_t,
 }
 
-sample_x86_thread :: proc(my_task: darwin.task_t, child_task: darwin.task_t, thread: darwin.thread_act_t, sample_buffer: ^[dynamic]u64) {
+Sample :: struct {
+	ts:       i64,
+	addr:     u64,
+}
+
+Sample_State :: struct {
+	threads: map[u64][dynamic]Sample,
+}
+
+sample_x86_thread :: proc(my_task: darwin.task_t, child_task: darwin.task_t, thread: darwin.thread_act_t, ts: u64, s_stack: ^[dynamic]Sample) {
 	state: darwin.x86_thread_state64_t
 	state_count: u32 = darwin.X86_THREAD_STATE64_COUNT
 	if darwin.thread_get_state(thread, darwin.X86_THREAD_STATE64, darwin.thread_state_t(&state), &state_count) != 0 {
 		return
 	}
 
-	fmt.printf("RIP: 0x%08x\n", state.rip)
-	fmt.printf("RSP: 0x%08x\n", state.rsp)
-	append(sample_buffer, state.rip)
+	append(s_stack, Sample{ts = i64(ts), addr = state.rip})
 
 	sp := state.rsp
 
@@ -45,13 +52,11 @@ sample_x86_thread :: proc(my_task: darwin.task_t, child_task: darwin.task_t, thr
 		return
 	}
 
-	val := page[0]
-	fmt.printf("top of stack page: 0x%08x\n", val)
-
 	darwin.mach_vm_deallocate(my_task, page, page_size)
 }
 
-sample_task :: proc(my_task: darwin.task_t, child_task: darwin.task_t, sample_buffer: ^[dynamic]u64) -> bool {
+sample_task :: proc(my_task: darwin.task_t, child_task: darwin.task_t, sample_state: ^Sample_State) -> bool {
+	ts := time.read_cycle_counter()
 	if darwin.task_suspend(child_task) != 0 {
 		return false
 	}
@@ -70,10 +75,16 @@ sample_task :: proc(my_task: darwin.task_t, child_task: darwin.task_t, sample_bu
 		if darwin.thread_info(thread, darwin.THREAD_IDENTIFIER_INFO, &id_info, &count) != 0 {
 			continue
 		}
-		fmt.printf("thread id: %v\n", id_info.thread_id)
+
+		s_stack, ok := &sample_state.threads[id_info.thread_id]
+		if !ok {
+			tmp := make([dynamic]Sample)
+			sample_state.threads[id_info.thread_id] = tmp
+			s_stack, _ := &sample_state.threads[id_info.thread_id]
+		}
 
 		if ODIN_ARCH == .amd64 {
-			sample_x86_thread(my_task, child_task, thread, sample_buffer)
+			sample_x86_thread(my_task, child_task, thread, ts, s_stack)
 		} else {
 			fmt.printf("don't support yet!\n")
 			continue
@@ -87,41 +98,41 @@ sample_task :: proc(my_task: darwin.task_t, child_task: darwin.task_t, sample_bu
 	return true
 }
 
-SampleState :: struct {
+MachSampleSetup :: struct {
 	has_setup:                    bool,
 	my_task:             darwin.task_t,
 	recv_port:      darwin.mach_port_t,
 	bootstrap_port: darwin.mach_port_t,
 }
 
-sample_state := SampleState{}
-sample_child :: proc(program_name: string, args: []string) -> (ok: bool) {
-	if !sample_state.has_setup {
-		sample_state.my_task = darwin.mach_task_self()
-		if darwin.mach_port_allocate(sample_state.my_task, darwin.MACH_PORT_RIGHT_RECEIVE, &sample_state.recv_port) != 0 {
+sample_setup := MachSampleSetup{}
+sample_child :: proc(trace: ^Trace, program_name: string, args: []string) -> (ok: bool) {
+	if !sample_setup.has_setup {
+		sample_setup.my_task = darwin.mach_task_self()
+		if darwin.mach_port_allocate(sample_setup.my_task, darwin.MACH_PORT_RIGHT_RECEIVE, &sample_setup.recv_port) != 0 {
 			fmt.printf("failed to allocate port\n")
 			return
 		}
 
-		if darwin.task_get_special_port(sample_state.my_task, darwin.TASK_BOOTSTRAP_PORT, &sample_state.bootstrap_port) != 0 {
+		if darwin.task_get_special_port(sample_setup.my_task, darwin.TASK_BOOTSTRAP_PORT, &sample_setup.bootstrap_port) != 0 {
 			fmt.printf("failed to get special port\n")
 			return
 		}
 
 		right: darwin.mach_port_t
 		acquired_right: darwin.mach_port_t
-		if darwin.mach_port_extract_right(sample_state.my_task, u32(sample_state.recv_port), darwin.MACH_MSG_TYPE_MAKE_SEND, &right, &acquired_right) != 0 {
+		if darwin.mach_port_extract_right(sample_setup.my_task, u32(sample_setup.recv_port), darwin.MACH_MSG_TYPE_MAKE_SEND, &right, &acquired_right) != 0 {
 			fmt.printf("failed to get right\n")
 			return
 		}
 
-		k_err := darwin.bootstrap_register2(sample_state.bootstrap_port, "SPALL_BOOTSTRAP", right, 0)
+		k_err := darwin.bootstrap_register2(sample_setup.bootstrap_port, "SPALL_BOOTSTRAP", right, 0)
 		if k_err != 0 {
 			fmt.printf("failed to register bootstrap | got: %v\n", k_err)
 			return
 		}
 
-		sample_state.has_setup = true
+		sample_setup.has_setup = true
 	}
 
 	env_vars := os2.environ(context.temp_allocator)
@@ -152,13 +163,13 @@ sample_child :: proc(program_name: string, args: []string) -> (ok: bool) {
 
 	// Get the Child's task and port
 	recv_msg := Mach_Recv_Msg{}
-	if darwin.mach_msg(&recv_msg, darwin.MACH_RCV_MSG | darwin.MACH_RCV_TIMEOUT, 0, size_of(recv_msg), sample_state.recv_port, initial_timeout, 0) != 0 {
+	if darwin.mach_msg(&recv_msg, darwin.MACH_RCV_MSG | darwin.MACH_RCV_TIMEOUT, 0, size_of(recv_msg), sample_setup.recv_port, initial_timeout, 0) != 0 {
 		fmt.printf("failed to get child task\n")
 		return
 	}
 	child_task := recv_msg.task_port.name
 
-	if darwin.mach_msg(&recv_msg, darwin.MACH_RCV_MSG | darwin.MACH_RCV_TIMEOUT, 0, size_of(recv_msg), sample_state.recv_port, initial_timeout, 0) != 0 {
+	if darwin.mach_msg(&recv_msg, darwin.MACH_RCV_MSG | darwin.MACH_RCV_TIMEOUT, 0, size_of(recv_msg), sample_setup.recv_port, initial_timeout, 0) != 0 {
 		fmt.printf("failed to get child port\n")
 		return
 	}
@@ -173,7 +184,6 @@ sample_child :: proc(program_name: string, args: []string) -> (ok: bool) {
 		fmt.printf("Failed to get child base address\n")
 		return
 	}
-	fmt.printf("Base address: 0x%08x\n", vm_offset)
 
 	// Send the all clear
 	send_msg := Mach_Send_Msg{}
@@ -183,7 +193,7 @@ sample_child :: proc(program_name: string, args: []string) -> (ok: bool) {
 	send_msg.header.msgh_size = size_of(send_msg)
 
 	send_msg.body.msgh_descriptor_count = 1
-	send_msg.task_port.name = sample_state.my_task
+	send_msg.task_port.name = sample_setup.my_task
 	send_msg.task_port.disposition = darwin.MACH_MSG_TYPE_COPY_SEND
 	send_msg.task_port.type = darwin.MACH_MSG_PORT_DESCRIPTOR
 	if darwin.mach_msg_send(&send_msg) != 0 {
@@ -193,13 +203,14 @@ sample_child :: proc(program_name: string, args: []string) -> (ok: bool) {
 
 	fmt.printf("Resuming child\n")
 
-	rips := make([dynamic]u64)
+	sample_state := Sample_State{}
+	sample_state.threads = make(map[u64][dynamic]Sample)
 
 	for {
-		if !sample_task(sample_state.my_task, child_task, &rips) {
+		if !sample_task(sample_setup.my_task, child_task, &sample_state) {
 			break
 		}
-		time.sleep(1 * time.Millisecond)
+		time.sleep(2 * time.Millisecond)
 	}
 
 	status: i32 = 0
@@ -211,7 +222,78 @@ sample_child :: proc(program_name: string, args: []string) -> (ok: bool) {
 			return
 		}
 	}
-	fmt.printf("child exited?\n\n")
+	trailing_ts := time.read_cycle_counter()
+
+	freq, _ := time.tsc_frequency()
+
+	init_trace(trace)
+	init_trace_allocs(trace, program_name)
+
+	trace.stamp_scale = ((1 / f64(freq)) * 1_000_000_000)
+	trace.base_address = vm_offset
+
+	proc_idx := setup_pid(trace, 0)
+	process := &trace.processes[proc_idx]
+
+	for thread_id, samples in sample_state.threads {
+		thread_idx := setup_tid(trace, proc_idx, u32(thread_id))
+		thread := &process.threads[thread_idx]
+
+		{
+			depth := Depth{
+				events = make([dynamic]Event),
+			}
+			non_zero_append(&thread.depths, depth)
+		}
+		depth := &thread.depths[0]
+
+		// blast through the bulk of the samples
+		for i := 0; i < len(samples) - 1; i += 1 {
+			cur_sample := samples[i]
+			next_sample := samples[i+1]
+			duration := next_sample.ts - cur_sample.ts
+
+			ev := add_event(&depth.events)
+			ev^ = Event{
+				has_addr = true,
+				id = cur_sample.addr,
+				args = 0,
+				timestamp = cur_sample.ts,
+				duration = duration,
+			}
+
+			thread.min_time = min(thread.min_time, cur_sample.ts)
+			process.min_time = min(process.min_time, cur_sample.ts)
+			trace.total_min_time = min(trace.total_min_time, cur_sample.ts)
+			trace.event_count += 1
+		}
+
+		// handle last sample as a special case
+		{
+			cur_sample := samples[len(samples)-1]
+			duration := i64(trailing_ts) - cur_sample.ts
+
+			ev := add_event(&depth.events)
+			ev^ = Event{
+				has_addr = true,
+				id = cur_sample.addr,
+				args = 0,
+				timestamp = cur_sample.ts,
+				duration = duration,
+			}
+
+			trace.total_min_time = min(trace.total_min_time, cur_sample.ts)
+			trace.total_max_time = max(trace.total_max_time, cur_sample.ts + duration)
+			thread.min_time = min(thread.min_time, cur_sample.ts)
+			thread.max_time = max(thread.max_time, cur_sample.ts + duration)
+			process.min_time = min(process.min_time, cur_sample.ts)
+			trace.event_count += 1
+		}
+	}
+
+	fmt.printf("Sampled %v events\n", trace.event_count)
+	generate_color_choices(trace)
+	chunk_events(trace)
 
 	return true
 }
