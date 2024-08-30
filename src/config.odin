@@ -155,7 +155,8 @@ gen_event_color :: proc(trace: ^Trace, _events: []Event, thread_max: i64, node: 
 	if len(events) == 1 {
 		ev := &events[0]
 		duration := bound_duration(ev, thread_max)
-		idx := name_color_idx(ev.id)
+		name := ev_name(trace, ev)
+		idx := name_color_idx(name)
 		node.avg_color = trace.color_choices[idx]
 
 		// if the event was started with no end, *right* as the trace quit, we'll get a duration of 0
@@ -167,7 +168,8 @@ gen_event_color :: proc(trace: ^Trace, _events: []Event, thread_max: i64, node: 
 	color := FVec3{}
 	color_weights := [COLOR_CHOICES]i64{}
 	for &ev in events {
-		idx := name_color_idx(ev.id)
+		name := ev_name(trace, &ev)
+		idx := name_color_idx(name)
 		duration := bound_duration(&ev, thread_max)
 
 		color_weights[idx] += duration
@@ -799,10 +801,6 @@ get_line_info :: proc(trace: ^Trace, _addr: u64) -> (string, u64, bool) {
 
 		line_info := trace.line_info[mid]
 		if addr == line_info.address {
-			if line_info.line_num == 0 {
-				return "", 0, false
-			}
-
 			return line_info.filename, line_info.line_num, true
 		} else if addr > line_info.address { 
 			low = mid + 1
@@ -814,10 +812,6 @@ get_line_info :: proc(trace: ^Trace, _addr: u64) -> (string, u64, bool) {
 	line_info := trace.line_info[low]
 
 	if addr == line_info.address {
-		if line_info.line_num == 0 {
-			return "", 0, false
-		}
-
 		return line_info.filename, line_info.line_num, true
 	}
 

@@ -821,7 +821,7 @@ draw_flamegraphs :: proc(gfx: ^GFX_Context, trace: ^Trace, start_time, end_time:
 							name := ev_name(trace, &ev)
 							e_idx := event_start_idx + de_id
 
-							idx := name_color_idx(ev.id)
+							idx := name_color_idx(name)
 							rect_color := trace.color_choices[idx]
 							grey := greyscale(trace.color_choices[idx])
 							if ui_state.multiselecting {
@@ -1170,7 +1170,8 @@ draw_minimap :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 							r_x    = max(r_x, 0)
 							r_w   := end_x - r_x
 
-							idx := name_color_idx(ev.id)
+							name := ev_name(trace, &ev)
+							idx := name_color_idx(name)
 							e_idx := event_start_idx + de_id
 
 							rect_color := trace.color_choices[idx]
@@ -1714,7 +1715,8 @@ draw_stats :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 			name_str := trunc_string(orig_str, 0, rem_width)
 			name_width := measure_text(orig_str, .PSize, .MonoFont)
 
-			tmp_color := trace.color_choices[name_color_idx(entry.key.id)]
+			name := ev_name(trace, &ev)
+			tmp_color := trace.color_choices[name_color_idx(name)]
 			draw_rect(gfx, dr, BVec4{u8(tmp_color.x), u8(tmp_color.y), u8(tmp_color.z), 255})
 			draw_text(gfx, name_str, Vec2{cursor, y_before + (em / 3)}, .PSize, .MonoFont, text_color)
 

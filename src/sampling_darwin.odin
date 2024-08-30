@@ -25,45 +25,157 @@ Mach_Send_Msg :: struct {
 
 Sample :: struct {
 	ts:       i64,
-	addr:     u64,
+	callstack: [dynamic]u64,
+}
+
+Sample_Thread :: struct {
+	samples: [dynamic]Sample,
+	max_depth: int,
 }
 
 Sample_State :: struct {
-	threads: map[u64][dynamic]Sample,
+	threads: map[u64]Sample_Thread,
+	program_path: string,
+	base_addr: u64,
 }
 
-sample_x86_thread :: proc(my_task: darwin.task_t, child_task: darwin.task_t, thread: darwin.thread_act_t, ts: u64, s_stack: ^[dynamic]Sample) {
+map_child_mem :: proc(my_task: darwin.task_t, child_task: darwin.task_t, addr: u64, size: u64) -> (mem: [^]u8, ok: bool) {
+	start_addr := addr
+	end_addr   := addr + size
+
+	page_start_addr := darwin.mach_vm_trunc_page(start_addr)
+	page_end_addr   := darwin.mach_vm_trunc_page(end_addr) + darwin.vm_page_size
+	full_size := page_end_addr - page_start_addr
+
+	data: [^]u8
+	cur_prot : i32 = darwin.VM_PROT_NONE
+	max_prot : i32 = darwin.VM_PROT_NONE
+	if darwin.mach_vm_remap(my_task, &data, full_size, 0, 1, child_task, page_start_addr, false, &cur_prot, &max_prot, darwin.VM_INHERIT_SHARE) != 0 {
+		return
+	}
+
+	start_shim := start_addr - page_start_addr
+	return data[start_shim:], true
+}
+unmap_child_mem :: proc(my_task: darwin.task_t, orig_addr: u64, mem: rawptr, size: u64) {
+	mem_addr := darwin.mach_vm_trunc_page(u64(uintptr(mem)))
+	mem_ptr := transmute([^]u64)rawptr(uintptr(mem_addr))
+
+	start_addr := orig_addr
+	end_addr   := orig_addr + size
+
+	start_addr = darwin.mach_vm_trunc_page(start_addr)
+	end_addr   = darwin.mach_vm_trunc_page(end_addr) + darwin.vm_page_size
+	full_size := end_addr - start_addr
+
+	darwin.mach_vm_deallocate(my_task, mem_ptr, full_size)
+}
+
+sample_x86_thread :: proc(my_task: darwin.task_t, child_task: darwin.task_t, thread: darwin.thread_act_t, ts: u64, sample_thread: ^Sample_Thread) -> (ok: bool) {
 	state: darwin.x86_thread_state64_t
 	state_count: u32 = darwin.X86_THREAD_STATE64_COUNT
 	if darwin.thread_get_state(thread, darwin.X86_THREAD_STATE64, darwin.thread_state_t(&state), &state_count) != 0 {
 		return
 	}
 
-	append(s_stack, Sample{ts = i64(ts), addr = state.rip})
+	cur_depth := 1
+
+	append(&sample_thread.samples, Sample{ts = i64(ts), callstack = make([dynamic]u64)})
+	callstack := &sample_thread.samples[len(sample_thread.samples)-1].callstack
+	append(callstack, state.rip)
+	sample_thread.max_depth = max(sample_thread.max_depth, cur_depth)
 
 	sp := state.rsp
+	bp := state.rbp
+	for {
 
-	page: [^]u64
-	page_size : u64 = 4096
+		// If the base pointer is 0, we're at the top of the stack
+		if bp == 0 {
+			return true
+		}
 
-	cur_prot : i32 = darwin.VM_PROT_NONE
-	max_prot : i32 = darwin.VM_PROT_NONE
-	if darwin.mach_vm_remap(my_task, &page, page_size, 0, 1, child_task, sp, false, &cur_prot, &max_prot, darwin.VM_INHERIT_SHARE) != 0 {
-		return
+		// base pointer should be aligned
+		if bp % 8 != 0 {
+			return false
+		}
+
+		slot := map_child_mem(my_task, child_task, bp, size_of(u64)) or_return
+
+		append(callstack, bp)
+		cur_depth += 1
+		sample_thread.max_depth = max(sample_thread.max_depth, cur_depth)
+
+		stack_slot := transmute([^]u64)slot
+		new_bp := stack_slot[0]
+		unmap_child_mem(my_task, bp, slot, size_of(u64))
+
+		bp = new_bp
 	}
 
-	darwin.mach_vm_deallocate(my_task, page, page_size)
+	return true
 }
 
-sample_task :: proc(my_task: darwin.task_t, child_task: darwin.task_t, sample_state: ^Sample_State) -> bool {
+process_dylibs :: proc(trace: ^Trace, my_task: darwin.task_t, child_task: darwin.task_t, sample_state: ^Sample_State) -> bool {
+	if sample_state.base_addr != 0 {
+		return true
+	}
+
+	dyld_info := darwin.task_dyld_info{}
+	count : u32 = darwin.TASK_DYLD_INFO_COUNT
+	if darwin.task_info(child_task, darwin.TASK_DYLD_INFO, darwin.task_info_t(&dyld_info), &count) != 0 {
+		return false
+	}
+
+	image_infos_bytes := map_child_mem(my_task, child_task, dyld_info.all_image_info_addr, size_of(darwin.dyld_all_image_infos)) or_return
+	image_infos := transmute(^darwin.dyld_all_image_infos)image_infos_bytes
+
+	for i : u64 = 0; i < u64(image_infos.info_array_count); i += 1 {
+		info_array_entry_addr := u64(uintptr(image_infos.info_array)) + (i * size_of(darwin.dyld_image_info))
+		entry_bytes := map_child_mem(my_task, child_task, info_array_entry_addr, size_of(darwin.dyld_image_info)) or_return
+		info_entry := transmute(^darwin.dyld_image_info)entry_bytes
+
+		file_path_addr := u64(uintptr(rawptr(info_entry.image_file_path)))
+		file_path_bytes := map_child_mem(my_task, child_task, file_path_addr, 512) or_return
+		//fmt.printf("0x%08x -- %s\n", info_entry.image_load_addr, cstring(file_path_bytes))
+
+		file_path := string(cstring(file_path_bytes))
+
+		// Find the program's base address here
+		if sample_state.base_addr == 0 {
+			if file_path == sample_state.program_path {
+				sample_state.base_addr = info_entry.image_load_addr
+				fmt.printf("Found program base addr: 0x%08x\n", info_entry.image_load_addr)
+			}
+		}
+
+		unmap_child_mem(my_task, info_array_entry_addr, info_entry, size_of(darwin.dyld_image_info))
+		unmap_child_mem(my_task, file_path_addr, file_path_bytes, 512)
+	}
+
+	dyld_path_addr := u64(uintptr(rawptr(image_infos.dyld_path)))
+	dyld_path_bytes := map_child_mem(my_task, child_task, dyld_path_addr, 512) or_return
+	//fmt.printf("0x%08x -- %s\n", image_infos.dyld_image_load_addr, cstring(dyld_path_bytes))
+
+	unmap_child_mem(my_task, dyld_path_addr, dyld_path_bytes, 512)
+	unmap_child_mem(my_task, dyld_info.all_image_info_addr, image_infos, size_of(darwin.dyld_all_image_infos))
+
+	return sample_state.base_addr != 0
+}
+
+sample_task :: proc(trace: ^Trace, my_task: darwin.task_t, child_task: darwin.task_t, sample_state: ^Sample_State) -> bool {
 	ts := time.read_cycle_counter()
 	if darwin.task_suspend(child_task) != 0 {
 		return false
 	}
+	defer darwin.task_resume(child_task)
 
 	thread_list: darwin.thread_list_t
 	thread_count: u32
 	if darwin.task_threads(child_task, &thread_list, &thread_count) != 0 {
+		return false
+	}
+
+	if !process_dylibs(trace, my_task, child_task, sample_state) {
 		return false
 	}
 
@@ -76,23 +188,18 @@ sample_task :: proc(my_task: darwin.task_t, child_task: darwin.task_t, sample_st
 			continue
 		}
 
-		s_stack, ok := &sample_state.threads[id_info.thread_id]
+		sample_thread, ok := &sample_state.threads[id_info.thread_id]
 		if !ok {
-			tmp := make([dynamic]Sample)
-			sample_state.threads[id_info.thread_id] = tmp
-			s_stack, _ := &sample_state.threads[id_info.thread_id]
+			sample_state.threads[id_info.thread_id] = Sample_Thread{max_depth = 0, samples = make([dynamic]Sample)}
+			sample_thread, _ = &sample_state.threads[id_info.thread_id]
 		}
 
 		if ODIN_ARCH == .amd64 {
-			sample_x86_thread(my_task, child_task, thread, ts, s_stack)
+			sample_x86_thread(my_task, child_task, thread, ts, sample_thread)
 		} else {
 			fmt.printf("don't support yet!\n")
 			continue
 		}
-	}
-
-	if darwin.task_resume(child_task) != 0 {
-		return false
 	}
 
 	return true
@@ -194,10 +301,14 @@ sample_child :: proc(trace: ^Trace, program_name: string, args: []string) -> (ok
 	fmt.printf("Resuming child\n")
 
 	sample_state := Sample_State{}
-	sample_state.threads = make(map[u64][dynamic]Sample)
+	sample_state.threads = make(map[u64]Sample_Thread)
+	sample_state.program_path = prog_path
+
+	init_trace(trace)
+	init_trace_allocs(trace, program_name)
 
 	for {
-		if !sample_task(sample_setup.my_task, child_task, &sample_state) {
+		if !sample_task(trace, sample_setup.my_task, child_task, &sample_state) {
 			break
 		}
 		time.sleep(2 * time.Millisecond)
@@ -216,39 +327,42 @@ sample_child :: proc(trace: ^Trace, program_name: string, args: []string) -> (ok
 
 	freq, _ := time.tsc_frequency()
 
-	init_trace(trace)
-	init_trace_allocs(trace, program_name)
-
 	trace.stamp_scale = ((1 / f64(freq)) * 1_000_000_000)
+	trace.base_address = sample_state.base_addr
 
 	proc_idx := setup_pid(trace, 0)
 	process := &trace.processes[proc_idx]
 
-	for thread_id, samples in sample_state.threads {
+	for thread_id, sample_thread in sample_state.threads {
 		thread_idx := setup_tid(trace, proc_idx, u32(thread_id))
 		thread := &process.threads[thread_idx]
 
-		{
+		for len(thread.depths) < sample_thread.max_depth {
 			depth := Depth{
 				events = make([dynamic]Event),
 			}
 			non_zero_append(&thread.depths, depth)
 		}
-		depth := &thread.depths[0]
 
 		// blast through the bulk of the samples
-		for i := 0; i < len(samples) - 1; i += 1 {
-			cur_sample := samples[i]
-			next_sample := samples[i+1]
+		for i := 0; i < len(sample_thread.samples) - 1; i += 1 {
+			cur_sample := sample_thread.samples[i]
+			next_sample := sample_thread.samples[i+1]
 			duration := next_sample.ts - cur_sample.ts
 
-			ev := add_event(&depth.events)
-			ev^ = Event{
-				has_addr = true,
-				id = cur_sample.addr,
-				args = 0,
-				timestamp = cur_sample.ts,
-				duration = duration,
+			k := len(cur_sample.callstack) - 1
+			for j := 0; j < len(cur_sample.callstack); j += 1 {
+				depth := &thread.depths[k]
+				k -= 1
+
+				ev := add_event(&depth.events)
+				ev^ = Event{
+					has_addr = true,
+					id = cur_sample.callstack[j],
+					args = 0,
+					timestamp = cur_sample.ts,
+					duration = duration,
+				}
 			}
 
 			thread.min_time = min(thread.min_time, cur_sample.ts)
@@ -259,16 +373,22 @@ sample_child :: proc(trace: ^Trace, program_name: string, args: []string) -> (ok
 
 		// handle last sample as a special case
 		{
-			cur_sample := samples[len(samples)-1]
+			cur_sample := sample_thread.samples[len(sample_thread.samples)-1]
 			duration := i64(trailing_ts) - cur_sample.ts
 
-			ev := add_event(&depth.events)
-			ev^ = Event{
-				has_addr = true,
-				id = cur_sample.addr,
-				args = 0,
-				timestamp = cur_sample.ts,
-				duration = duration,
+			k := len(cur_sample.callstack) - 1
+			for j := 0; j < len(cur_sample.callstack); j += 1 {
+				depth := &thread.depths[k]
+				k -= 1
+
+				ev := add_event(&depth.events)
+				ev^ = Event{
+					has_addr = true,
+					id = cur_sample.callstack[j],
+					args = 0,
+					timestamp = cur_sample.ts,
+					duration = duration,
+				}
 			}
 
 			trace.total_min_time = min(trace.total_min_time, cur_sample.ts)
@@ -279,8 +399,9 @@ sample_child :: proc(trace: ^Trace, program_name: string, args: []string) -> (ok
 			trace.event_count += 1
 		}
 	}
-
 	fmt.printf("Sampled %v events\n", trace.event_count)
+
+	load_executable(trace, prog_path)
 	generate_color_choices(trace)
 	chunk_events(trace)
 

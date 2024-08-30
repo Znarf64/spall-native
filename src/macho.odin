@@ -8,6 +8,7 @@ MACH_MAGIC_64 :: 0xfeedfacf
 MACH_CMD_SYMTAB      :: 0x2
 MACH_CMD_SEGMENT_64  :: 0x19
 MACH_FILETYPE_EXEC   :: 2
+MACH_FILETYPE_DYLIB  :: 6
 MACH_FILETYPE_DSYM   :: 10
 Mach_Header_64 :: struct #packed {
 	magic:       u32,
@@ -77,7 +78,7 @@ load_macho_symbols :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 	}
 
 	header := slice_to_type(exec_buffer, Mach_Header_64) or_return
-	if header.file_type != MACH_FILETYPE_EXEC {
+	if !(header.file_type == MACH_FILETYPE_EXEC || header.file_type == MACH_FILETYPE_DYLIB) {
 		return false
 	}
 
