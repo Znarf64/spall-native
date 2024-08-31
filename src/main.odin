@@ -120,7 +120,10 @@ threaded_sample_start :: proc(loader: ^Loader, data: rawptr) {
 	free(state)
 
 	// TODO replace me with something that respects quote-escapes
-	args := strings.split(program_args, " ")
+	args := []string{}
+	if len(program_args) > 0 {
+		args = strings.split(program_args, " ")
+	}
 	sample_child(trace, program_name, args)
 
 	pool_wait(&loader.pool)

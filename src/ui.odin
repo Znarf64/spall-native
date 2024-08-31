@@ -2513,7 +2513,7 @@ post_load_cleanup :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) 
 	reset_flamegraph_camera(trace, ui_state)
 
 	if trace.file_name != "" {
-		name := fmt.ctprintf("%s - spall beta 0.2", trace.base_name)
+		name := fmt.ctprintf("%s - spall beta 0.5", trace.base_name)
 		set_window_title(gfx, name)
 	}
 	ui_state.post_loading = false

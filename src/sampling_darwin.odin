@@ -1,5 +1,5 @@
 //+build darwin
-
+ 
 package main
 
 import "core:fmt"
@@ -129,6 +129,7 @@ process_dylibs :: proc(trace: ^Trace, my_task: darwin.task_t, child_task: darwin
 	image_infos_bytes := map_child_mem(my_task, child_task, dyld_info.all_image_info_addr, size_of(darwin.dyld_all_image_infos)) or_return
 	image_infos := transmute(^darwin.dyld_all_image_infos)image_infos_bytes
 
+	prog_name := filepath.base(sample_state.program_path)
 	for i : u64 = 0; i < u64(image_infos.info_array_count); i += 1 {
 		info_array_entry_addr := u64(uintptr(image_infos.info_array)) + (i * size_of(darwin.dyld_image_info))
 		entry_bytes := map_child_mem(my_task, child_task, info_array_entry_addr, size_of(darwin.dyld_image_info)) or_return
@@ -142,7 +143,8 @@ process_dylibs :: proc(trace: ^Trace, my_task: darwin.task_t, child_task: darwin
 
 		// Find the program's base address here
 		if sample_state.base_addr == 0 {
-			if file_path == sample_state.program_path {
+			obj_name := filepath.base(file_path)
+			if file_path == sample_state.program_path || obj_name == prog_name {
 				sample_state.base_addr = info_entry.image_load_addr
 				fmt.printf("Found program base addr: 0x%08x\n", info_entry.image_load_addr)
 			}
@@ -175,9 +177,7 @@ sample_task :: proc(trace: ^Trace, my_task: darwin.task_t, child_task: darwin.ta
 		return false
 	}
 
-	if !process_dylibs(trace, my_task, child_task, sample_state) {
-		return false
-	}
+	process_dylibs(trace, my_task, child_task, sample_state)
 
 	for i : u32 = 0; i < thread_count; i += 1 {
 		thread := thread_list[i]
@@ -253,18 +253,15 @@ sample_child :: proc(trace: ^Trace, program_name: string, args: []string) -> (ok
 	if err != nil { return }
 
 	prog_path := program_name
-	if !filepath.is_abs(prog_path) {
-		prog_path = fmt.tprintf("%s/%s", dir, program_name)
-	}
 	
 	envs[i] = fmt.tprintf("DYLD_INSERT_LIBRARIES=%s/tools/osx_dylib_sample/%s", dir, "same.dylib")
 
-	child_pid, err2 := os.posix_spawn(prog_path, args, envs[:], nil, nil)
+	child_pid, err2 := os.spawnp(prog_path, args, envs[:], nil, nil)
 	if err2 != nil {
-		fmt.printf("failed to spawn: %s\n", prog_path)
+		fmt.printf("failed to spawn: %s | %v\n", prog_path, err2)
 		return
 	}
-	fmt.printf("Spawned %v\n", child_pid)
+	fmt.printf("Spawned %s @ %v\n", prog_path, child_pid)
 
 	initial_timeout: u32 = 500 // ms
 
@@ -315,15 +312,17 @@ sample_child :: proc(trace: ^Trace, program_name: string, args: []string) -> (ok
 	trailing_ts := time.read_cycle_counter()
 
 	if trace.requested_stop {
-		// TODO: Should this kill the child? Detach? Not sure.
+		darwin.task_terminate(child_task)
 
 	// Wait for the program to fully finish
 	} else {
+		fmt.printf("waiting for wrap\n")
+
 		status: i32 = 0
-		posix.waitpid(posix.pid_t(child_pid), &status, nil)
+		posix.waitpid(child_pid, &status, nil)
 
 		for !posix.WIFEXITED(status) && posix.WIFSIGNALED(status) {
-			if posix.waitpid(posix.pid_t(child_pid), &status, nil) == -1 {
+			if posix.waitpid(child_pid, &status, nil) == -1 {
 				fmt.printf("failed to wait on child\n")
 				return
 			}

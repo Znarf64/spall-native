@@ -506,7 +506,7 @@ load_executable :: proc(trace: ^Trace, file_name: string) -> bool {
 
 	exec_buffer, ok := os.read_entire_file_from_filename(file_name)
 	if !ok {
-		post_error(trace, "Failed to load %s!", file_name)
+		post_error(trace, "Failed to load symbols from %s!", file_name)
 		return false
 	}
 	defer delete(exec_buffer)
