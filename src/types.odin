@@ -50,6 +50,8 @@ init_textbox_state :: proc() -> TextboxState {
 
 UIMode :: enum {
 	MainMenu,
+	SampleRunning,
+	TraceLoading,
 	TraceView,
 }
 

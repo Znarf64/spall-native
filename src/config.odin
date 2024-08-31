@@ -25,6 +25,61 @@ Parser :: struct {
 	pos: i64,
 	offset: i64,
 }
+
+ThreadFileLoadState :: struct {
+	filename: string,
+	trace: ^Trace,
+	ui_state: ^UIState,
+}
+
+threaded_trace_load :: proc(loader: ^Loader, data: rawptr) {
+	state := cast(^ThreadFileLoadState)(data)
+
+	trace := state.trace
+	filename := state.filename
+	ui_state := state.ui_state
+	free(state)
+
+	total_time     := time.tick_now()
+	parse_start    := time.tick_now()
+	load_spall_file(loader, trace, filename)
+	parse_duration := time.tick_since(parse_start)
+
+	fmt.printf("trace load took: %f ms, got %s events\n", time.duration_milliseconds(parse_duration), tens_fmt(u64(trace.event_count)))
+	fmt.printf("trace length: %s\n", time_fmt(disp_time(trace, f64(trace.total_max_time - trace.total_min_time))))
+
+	pool_wait(&loader.pool)
+	free_trace_temps(trace)
+
+	total_duration := time.tick_since(total_time)
+	fmt.printf("full load took: %f ms\n", time.duration_milliseconds(total_duration))
+
+	ui_state.loading_config = false
+	ui_state.post_loading = true
+}
+
+load_trace :: proc(loader: ^Loader, trace: ^Trace, ui_state: ^UIState, trace_name: string) -> (ok: bool) {
+	if ui_state.loading_config || trace_name == "" {
+		return false
+	}
+
+	free_trace(trace)
+	init_trace(trace)
+	ui_state.loading_config = true
+	ui_state.post_loading = false
+	ui_state.ui_mode = .TraceLoading
+
+	state := new(ThreadFileLoadState)
+	state^ = ThreadFileLoadState{
+		filename = trace_name,
+		trace = trace,
+		ui_state = ui_state,
+	}
+
+	loader_set_task(loader, Loader_Task{threaded_trace_load, state})
+	return true
+}
+
 real_pos :: proc(p: ^Parser) -> i64 { return p.pos }
 chunk_pos :: proc(p: ^Parser) -> i64 { return p.pos - p.offset }
 get_chunk :: proc(p: ^Parser, fd: os.Handle, chunk_buffer: []u8) -> (int, bool) {
@@ -547,7 +602,7 @@ init_trace :: proc(trace: ^Trace) {
 	}
 }
 
-load_file :: proc(loader: ^Loader, trace: ^Trace, file_name: string) {
+load_spall_file :: proc(loader: ^Loader, trace: ^Trace, file_name: string) {
 	start_time := time.tick_now()
 
 	init_trace(trace)

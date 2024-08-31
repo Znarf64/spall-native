@@ -93,7 +93,6 @@ awake           : bool
 random_seed     : u64
 
 // loading / trace state
-start_trace := ""
 loader := Loader{}
 
 // gl-rect nonsense
@@ -104,78 +103,34 @@ idx_pos := [?]glm.vec2{
 	{1.0, 1.0},
 }
 
-set_flamegraph_camera :: proc(trace: ^Trace, ui_state: ^UIState, start_ticks, duration_ticks: i64) {
-	cam.vel = Vec2{}
-
-	cam.current_scale = rescale(1.0, 0, f64(duration_ticks), 0, ui_state.full_flamegraph_rect.w)
-	cam.target_scale = cam.current_scale
-
-	adj_start_ticks := f64(start_ticks - trace.total_min_time)
-
-	cam.pan.x = -(adj_start_ticks * cam.current_scale)
-	cam.target_pan_x = cam.pan.x
-}
-
-reset_flamegraph_camera :: proc(trace: ^Trace, ui_state: ^UIState) {
-	cam = Camera{Vec2{0, 0}, Vec2{0, 0}, 0, 1, 1}
-	if trace.event_count == 0 { trace.total_min_time = 0; trace.total_max_time = 100000000000000; trace.stamp_scale = 1 }
-
-	start_time: f64 = 0
-	end_time  := f64(trace.total_max_time - trace.total_min_time)
-
-	side_pad  := 2 * em
-
-	cam.current_scale = rescale(cam.current_scale, start_time, end_time, 0, ui_state.full_flamegraph_rect.w - (side_pad * 2))
-	cam.target_scale = cam.current_scale
-
-	cam.pan.x += side_pad
-	cam.target_pan_x = cam.pan.x
-}
-
-get_event :: proc(trace: ^Trace, ev_id: EventID) -> ^Event {
-	p_idx := ev_id.pid
-	t_idx := ev_id.tid
-	d_idx := ev_id.did
-	e_idx := ev_id.eid
-
-	return &trace.processes[p_idx].threads[t_idx].depths[d_idx].events[e_idx]
-}
-
-
-ThreadFileLoadState :: struct {
-	filename: string,
+ThreadSampleRunState :: struct {
 	trace: ^Trace,
 	ui_state: ^UIState,
+	program_name: string,
+	program_args: string,
 }
 
-threaded_config_load :: proc(loader: ^Loader, data: rawptr) {
-	state := cast(^ThreadFileLoadState)(data)
+threaded_sample_start :: proc(loader: ^Loader, data: rawptr) {
+	state := cast(^ThreadSampleRunState)(data)
 
 	trace := state.trace
-	filename := state.filename
 	ui_state := state.ui_state
+	program_name := state.program_name
+	program_args := state.program_args
 	free(state)
 
-	total_time     := time.tick_now()
-	parse_start    := time.tick_now()
-	load_file(loader, trace, filename)
-	parse_duration := time.tick_since(parse_start)
-
-	fmt.printf("trace load took: %f ms, got %s events\n", time.duration_milliseconds(parse_duration), tens_fmt(u64(trace.event_count)))
-	fmt.printf("trace length: %s\n", time_fmt(disp_time(trace, f64(trace.total_max_time - trace.total_min_time))))
+	// TODO replace me with something that respects quote-escapes
+	args := strings.split(program_args, " ")
+	sample_child(trace, program_name, args)
 
 	pool_wait(&loader.pool)
 	free_trace_temps(trace)
-
-	total_duration := time.tick_since(total_time)
-	fmt.printf("full load took: %f ms\n", time.duration_milliseconds(total_duration))
 
 	ui_state.loading_config = false
 	ui_state.post_loading = true
 }
 
-
-load_config :: proc(loader: ^Loader, trace: ^Trace, ui_state: ^UIState) -> bool {
+start_sampling :: proc(loader: ^Loader, trace: ^Trace, ui_state: ^UIState, program_name: string, program_args: string) -> bool {
 	if ui_state.loading_config {
 		return false
 	}
@@ -183,20 +138,17 @@ load_config :: proc(loader: ^Loader, trace: ^Trace, ui_state: ^UIState) -> bool 
 	free_trace(trace)
 	init_trace(trace)
 	ui_state.loading_config = true
+	ui_state.post_loading = false
 
-	state := new(ThreadFileLoadState)
-	state^ = ThreadFileLoadState{
-		filename = start_trace,
+	state := new(ThreadSampleRunState)
+	state^ = ThreadSampleRunState{
 		trace = trace,
 		ui_state = ui_state,
+		program_name = program_name,
+		program_args = program_args,
 	}
-	// FIXME(will) turn start_trace into a function 
-	// start_trace gets set from a few places, namely 
-	// DROPFILE events, then in the draw_trace function
-	// it checks if start_trace is non
-	start_trace = ""
 
-	loader_set_task(loader, Loader_Task{threaded_config_load, state})
+	loader_set_task(loader, Loader_Task{threaded_sample_start, state})
 	return true
 }
 
@@ -257,6 +209,7 @@ main :: proc() {
 	second.next = first
 	second.prev = first
 
+	start_trace := ""
 	open_mode := UIMode.TraceView
 	// If user set a file on the cmdline
 	if opt.file != "" {
@@ -287,24 +240,14 @@ main :: proc() {
 	init_trace(trace)
 
 	if opt.terminal_mode {
-		if start_trace == "" {
+		if !load_trace(&loader, trace, &ui_state, start_trace) {
 			return
 		}
-
-		ok := load_config(&loader, trace, &ui_state)
-		if !ok { return }
 		loader_wait(&loader)
 		loader_destroy(&loader)
-
-		/*
-		for i := 0; i < 2; i += 1 {
-			ev := trace.processes[0].threads[0].depths[0].events[i]
-			fmt.printf("Got a function %v\n", ev_name(trace, &ev))
-		}
-		*/
-		
 		return
 	}
+	load_trace(&loader, trace, &ui_state, start_trace)
 
 	set_color_mode(false, true)
 
@@ -521,15 +464,8 @@ main :: proc() {
 								selected_box.cursor = len(selected_box.b.buf)
 							}
 						case .R: {
-							if trace.file_name != "" && !capture_text &&
-							   (ctrl_down || super_down) && !ui_state.loading_config {
-
-								fmt.printf("attempting to load %s\n", trace.file_name)
-								// FIXME(will) it would be nice if this could be a function
-								// but it can't without deeper fixes to the the data flow
-								start_trace = strings.clone(trace.file_name)
-								// NOTE(will) maybe necessary?
-								ui_state.ui_mode = .TraceView
+							if !capture_text && (ctrl_down || super_down) {
+								load_trace(&loader, trace, &ui_state, strings.clone(trace.file_name))
 							}
 						}
 					}
@@ -551,9 +487,7 @@ main :: proc() {
 					height = ev.h
 				}
 				case .FileDropped: {
-					start_trace = ev.str
-					ui_state.ui_mode = .TraceView
-					fmt.printf("start trace: %s\n", start_trace)
+					load_trace(&loader, trace, &ui_state, ev.str)
 				}
 				case .Rune: {
 					if capture_text {
@@ -648,7 +582,9 @@ main :: proc() {
 
 		#partial switch ui_state.ui_mode {
 			case .MainMenu: draw_main_menu(&gfx, trace, &ui_state, dt)
-			case .TraceView: draw_trace(&gfx, trace, &ui_state, &loader, dt)
+			case .SampleRunning: draw_sample_running(&gfx, trace, &ui_state, dt)
+			case .TraceLoading: draw_trace_loading(&gfx, trace, &ui_state, dt)
+			case .TraceView: draw_trace_view(&gfx, trace, &ui_state,  dt)
 		}
 
 		// reset the cursor if we're not over a selectable thing

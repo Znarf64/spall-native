@@ -27,6 +27,43 @@ get_current_window :: proc(trace: ^Trace, cam: Camera, ui_state: ^UIState) -> (i
 	return display_range_start, display_range_end
 }
 
+get_event :: proc(trace: ^Trace, ev_id: EventID) -> ^Event {
+	p_idx := ev_id.pid
+	t_idx := ev_id.tid
+	d_idx := ev_id.did
+	e_idx := ev_id.eid
+
+	return &trace.processes[p_idx].threads[t_idx].depths[d_idx].events[e_idx]
+}
+
+set_flamegraph_camera :: proc(trace: ^Trace, ui_state: ^UIState, start_ticks, duration_ticks: i64) {
+	cam.vel = Vec2{}
+
+	cam.current_scale = rescale(1.0, 0, f64(duration_ticks), 0, ui_state.full_flamegraph_rect.w)
+	cam.target_scale = cam.current_scale
+
+	adj_start_ticks := f64(start_ticks - trace.total_min_time)
+
+	cam.pan.x = -(adj_start_ticks * cam.current_scale)
+	cam.target_pan_x = cam.pan.x
+}
+
+reset_flamegraph_camera :: proc(trace: ^Trace, ui_state: ^UIState) {
+	cam = Camera{Vec2{0, 0}, Vec2{0, 0}, 0, 1, 1}
+	if trace.event_count == 0 { trace.total_min_time = 0; trace.total_max_time = 100000000000000; trace.stamp_scale = 1 }
+
+	start_time: f64 = 0
+	end_time  := f64(trace.total_max_time - trace.total_min_time)
+
+	side_pad  := 2 * em
+
+	cam.current_scale = rescale(cam.current_scale, start_time, end_time, 0, ui_state.full_flamegraph_rect.w - (side_pad * 2))
+	cam.target_scale = cam.current_scale
+
+	cam.pan.x += side_pad
+	cam.target_pan_x = cam.pan.x
+}
+
 next_line :: proc(y: ^f64, h: f64) -> f64 {
 	res := y^
 	y^ += h + (h / 1.5)
@@ -311,9 +348,7 @@ draw_reduced_header :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState
 		if button(gfx, Rect{cursor_x, (header_rect.h / 2) - (button_height / 2), button_width, button_height}, "\uf07c", "open file", .IconFont, 0, ui_state.width) {
 			filename, ok := open_file_dialog()
 			if ok {
-				ui_state.ui_mode = .TraceView
-				start_trace = filename
-				load_config(&loader, trace, ui_state)
+				load_trace(&loader, trace, ui_state, filename)
 			}
 		}
 		cursor_x += button_width + button_pad
@@ -398,8 +433,7 @@ draw_header :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 		if button(gfx, Rect{cursor_x, (header_rect.h / 2) - (button_height / 2), button_width, button_height}, "\uf07c", "open file", .IconFont, 0, ui_state.width) {
 			filename, ok := open_file_dialog()
 			if ok {
-				start_trace = filename
-				load_config(&loader, trace, ui_state)
+				load_trace(&loader, trace, ui_state, filename)
 			}
 		}
 		cursor_x += button_width + button_pad
@@ -422,8 +456,7 @@ draw_header :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 		if button(gfx, Rect{cursor_x, (header_rect.h / 2) - (button_height / 2), button_width, button_height}, "\uf0e2", "reload the current trace", .IconFont, 0, ui_state.width) {
 			// reload the file
 			fmt.printf("attempting to load %s\n", trace.file_name)
-			start_trace = strings.clone(trace.file_name)
-			ui_state.ui_mode = .TraceView
+			load_trace(&loader, trace, ui_state, strings.clone(trace.file_name))
 		}
 
 		file_name_width := measure_text(trace.base_name, .H1Size, .DefaultFont)
@@ -2312,7 +2345,7 @@ draw_errorbox :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 	draw_text(gfx, trace.error_message, Vec2{(error_rect.x + (error_rect.w / 2)) - (msg_width / 2), (error_rect.y + (error_rect.h / 2)) - (msg_height / 2)}, .PSize, .DefaultFont, text_color)
 }
 
-draw_trace :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState, loader: ^Loader, dt: f64) {
+draw_trace_view :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState, dt: f64) {
 		rect_tooltip_rect = empty_event
 		rect_tooltip_pos = Vec2{}
 		rendered_rect_tooltip = false
@@ -2330,61 +2363,8 @@ draw_trace :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState, loader:
 		greyanim_t = f32((t - multiselect_t) * 5)
 		greymotion = ease_in_out(greyanim_t)
 
-		// FIXME(will) this is kinda gross
-		// load_config gets triggered when start_trace is set
-		if start_trace != "" && !ui_state.loading_config {
-			load_config(loader, trace, ui_state)
-		}
-
-		if ui_state.loading_config {
-			offset := trace.parser.offset
-			size := trace.total_size
-
-			pad_size : f64 = 4
-			chunk_size : f64 = 10
-
-			load_box := Rect{0, 0, 100, 100}
-			load_box = Rect{
-				(ui_state.width / 2) - (load_box.w / 2) - pad_size,
-				(ui_state.height / 2) - (load_box.h / 2) - pad_size,
-				load_box.w + pad_size,
-				load_box.h + pad_size,
-			}
-
-			draw_rect(gfx, load_box, BVec4{30, 30, 30, 255})
-			chunk_count := int(rescale(f64(offset), 0, f64(size), 0, 100))
-
-			chunk := Rect{0, 0, chunk_size, chunk_size}
-			start_x := load_box.x + pad_size
-			start_y := load_box.y + pad_size
-			for i := chunk_count; i >= 0; i -= 1 {
-				cur_x := f64(i %% int(chunk_size))
-				cur_y := f64(i /  int(chunk_size))
-				draw_rect(gfx, Rect{
-					start_x + (cur_x * chunk_size),
-					start_y + (cur_y * chunk_size),
-					chunk_size - pad_size,
-					chunk_size - pad_size,
-				}, loading_block_color)
-			}
-
-			ui_state.render_one_more = true
-			return
-		}
 		defer {
 			trace.stats.released_event = empty_event
-		}
-
-		if ui_state.post_loading {
-			if trace.event_count == 0 { trace.total_min_time = 0; trace.total_max_time = 1000 }
-			ui_state.multiselecting = false
-			reset_flamegraph_camera(trace, ui_state)
-
-			if trace.file_name != "" {
-				name := fmt.ctprintf("%s - spall beta 0.2", trace.base_name)
-				set_window_title(gfx, name)
-			}
-			ui_state.post_loading = false
 		}
 
 		// process key/mouse inputs
@@ -2399,7 +2379,6 @@ draw_trace :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState, loader:
 		bucket_count = 0
 
 		draw_flamegraphs(gfx, trace, start_time, end_time, ui_state)
-
 		draw_minimap(gfx, trace, ui_state)
 		draw_topbars(gfx, trace, start_time, end_time, ui_state)
 
@@ -2523,13 +2502,56 @@ draw_main_menu :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState, dt:
 		program_name := strings.to_string(program_input_box.b)
 		program_args := strings.to_string(cmdargs_input_box.b)
 
-		// TODO replace me with something that respects quote-escapes
-		args := strings.split(program_args, " ")
-
-		if !sample_child(trace, program_name, args) {
-			fmt.printf("Failed to sample `%s %v`\n", program_name, args)
-		} else {
-			ui_state.ui_mode = .TraceView
-		}
+		start_sampling(&loader, trace, ui_state, program_name, program_args)
 	}
 }
+
+draw_trace_loading :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState, dt: f64) {
+	offset := trace.parser.offset
+	size := trace.total_size
+
+	pad_size : f64 = 4
+	chunk_size : f64 = 10
+
+	load_box := Rect{0, 0, 100, 100}
+	load_box = Rect{
+		(ui_state.width / 2) - (load_box.w / 2) - pad_size,
+		(ui_state.height / 2) - (load_box.h / 2) - pad_size,
+		load_box.w + pad_size,
+		load_box.h + pad_size,
+	}
+
+	draw_rect(gfx, load_box, BVec4{30, 30, 30, 255})
+	chunk_count := int(rescale(f64(offset), 0, f64(size), 0, 100))
+
+	chunk := Rect{0, 0, chunk_size, chunk_size}
+	start_x := load_box.x + pad_size
+	start_y := load_box.y + pad_size
+	for i := chunk_count; i >= 0; i -= 1 {
+		cur_x := f64(i %% int(chunk_size))
+		cur_y := f64(i /  int(chunk_size))
+		draw_rect(gfx, Rect{
+			start_x + (cur_x * chunk_size),
+			start_y + (cur_y * chunk_size),
+			chunk_size - pad_size,
+			chunk_size - pad_size,
+		}, loading_block_color)
+	}
+
+	ui_state.render_one_more = true
+	
+	if ui_state.post_loading {
+		if trace.event_count == 0 { trace.total_min_time = 0; trace.total_max_time = 1000 }
+		ui_state.multiselecting = false
+		reset_flamegraph_camera(trace, ui_state)
+
+		if trace.file_name != "" {
+			name := fmt.ctprintf("%s - spall beta 0.2", trace.base_name)
+			set_window_title(gfx, name)
+		}
+		ui_state.post_loading = false
+		ui_state.ui_mode = .TraceView
+	}
+}
+
+draw_sample_running :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState, dt: f64) { }
