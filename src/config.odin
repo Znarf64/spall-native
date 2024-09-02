@@ -143,7 +143,11 @@ free_trace :: proc(trace: ^Trace) {
 	delete(trace.stats.selected_ranges)
 	sm_free(&trace.stats.stat_map)
 	in_free(&trace.intern)
-	delete(trace.functions)
+
+	for &bucket in trace.func_buckets {
+		delete(bucket.functions)
+	}
+	delete(trace.func_buckets)
 }
 
 bound_duration :: proc(ev: ^Event, max_ts: i64) -> i64 {
@@ -515,37 +519,36 @@ load_executable :: proc(trace: ^Trace, file_name: string) -> bool {
 		post_error(trace, "Invalid executable file!")
 		return false
 	}
+	
+	append(&trace.func_buckets, FunctionRanges{functions = make([dynamic]Function)})
+	bucket := &trace.func_buckets[len(trace.func_buckets)-1]
 
 	magic_chunk := (^u32)(raw_data(exec_buffer[:4]))^
 	if bytes.equal(exec_buffer[:4], ELF_MAGIC) {
-		ok := load_elf(trace, exec_buffer)
+		ok := load_elf(trace, exec_buffer, &bucket.functions)
 		if !ok {
 			post_error(trace, "Failed to parse ELF!")
 			return false
 		}
 	} else if magic_chunk == MACH_MAGIC_64 {
-		ok := load_macho_symbols(trace, exec_buffer)
+
+		ok := load_macho_symbols(trace, exec_buffer, 0, &bucket.functions)
 		if !ok {
 			post_error(trace, "Failed to parse Mach-O!")
 			return false
 		}
 
-		file_base := filepath.base(file_name)
-		b := strings.builder_make(context.temp_allocator)
-		strings.write_string(&b, file_name)
-		strings.write_string(&b, ".dSYM/Contents/Resources/DWARF/")
-		strings.write_string(&b, file_base)
-		
-		debug_file_name := strings.to_string(b)
+		debug_file_name := guess_debug_path(file_name)
 		debug_buffer, ok2 := os.read_entire_file_from_filename(debug_file_name)
 		if !ok2 {
 			post_error(trace, "No debug info found!")
 			return false
 		}
+		defer delete(debug_buffer)
 
-		load_macho_debug(trace, debug_buffer)
+		load_macho_debug(trace, debug_buffer, 0, &bucket.functions)
 	} else if bytes.equal(exec_buffer[:2], DOS_MAGIC) {
-		ok := load_pe32(trace, exec_buffer)
+		ok := load_pe32(trace, exec_buffer, &bucket.functions)
 		if !ok {
 			post_error(trace, "Failed to parse PE32!")
 			return false
@@ -555,7 +558,7 @@ load_executable :: proc(trace: ^Trace, file_name: string) -> bool {
 		return false
 	}
 
-	fmt.printf("Loaded %s function entries!\n", tens_fmt(u64(len(trace.functions))))
+	fmt.printf("Loaded %s function entries!\n", tens_fmt(u64(len(bucket.functions))))
 
 	return true
 }
@@ -565,7 +568,7 @@ init_trace_allocs :: proc(trace: ^Trace, file_name: string) {
 	trace.process_map  = vh_init()
 	trace.string_block = make([dynamic]string)
 	trace.intern       = in_init()
-	trace.functions    = make([dynamic]Function)
+	trace.func_buckets = make([dynamic]FunctionRanges)
 
 	trace.stats.selected_ranges = make([dynamic]Range)
 	trace.stats.stat_map        = sm_init()
@@ -790,14 +793,30 @@ ev_name :: proc(trace: ^Trace, ev: ^Event) -> string {
 }
 
 get_function :: proc(trace: ^Trace, _addr: u64) -> (u64, bool) {
-	if len(trace.functions) == 0 {
+	if len(trace.func_buckets) == 0 {
 		return 0, false
 	}
 
 	addr := _addr - trace.base_address
 
-	low_pc := trace.functions[0].low_pc
-	high_pc := trace.functions[len(trace.functions)-1].high_pc
+	cur_bucket: ^FunctionRanges = nil
+	for &bucket in trace.func_buckets {
+		if len(bucket.functions) == 0 {
+			continue
+		}
+
+		if _addr >= bucket.functions[0].low_pc &&
+		   _addr <= bucket.functions[len(bucket.functions)-1].high_pc {
+			cur_bucket = &bucket
+			break
+		}
+	}
+	if cur_bucket == nil {
+		return 0, false
+	}
+
+	low_pc := cur_bucket.functions[0].low_pc
+	high_pc := cur_bucket.functions[len(cur_bucket.functions)-1].high_pc
 
 	// make sure address is within function bounds
 	if low_pc > addr || high_pc < addr {
@@ -805,13 +824,13 @@ get_function :: proc(trace: ^Trace, _addr: u64) -> (u64, bool) {
 	}
 
 	low := 0
-	max := len(trace.functions)
+	max := len(cur_bucket.functions)
 	high := max - 1
 
 	for low < high {
 		mid := (low + high) / 2
 
-		function := trace.functions[mid]
+		function := cur_bucket.functions[mid]
 		if addr >= function.low_pc && addr <= function.high_pc {
 			return function.name, true
 		} else if addr >= function.high_pc { 
@@ -821,7 +840,7 @@ get_function :: proc(trace: ^Trace, _addr: u64) -> (u64, bool) {
 		}
 	}
 
-	function := trace.functions[low]
+	function := cur_bucket.functions[low]
 
 	if addr >= function.low_pc && addr <= function.high_pc {
 		return function.name, true

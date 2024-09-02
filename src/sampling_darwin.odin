@@ -7,6 +7,8 @@ import "core:os"
 import "core:os/os2"
 import "core:path/filepath"
 import "core:time"
+import "core:slice"
+import "core:strings"
 import "core:sys/posix"
 import "core:sys/darwin"
 
@@ -36,10 +38,43 @@ Sample_Thread :: struct {
 Sample_State :: struct {
 	threads: map[u64]Sample_Thread,
 	program_path: string,
-	base_addr: u64,
+	dylibs_checked: bool,
 }
 
-map_child_mem :: proc(my_task: darwin.task_t, child_task: darwin.task_t, addr: u64, size: u64) -> (mem: [^]u8, ok: bool) {
+map_child_mem :: proc(my_task: darwin.task_t, child_task: darwin.task_t, addr: u64, $T: typeid) -> (val: ^T, ok: bool) {
+	start_addr := addr
+	end_addr   := addr + size_of(T)
+
+	page_start_addr := darwin.mach_vm_trunc_page(start_addr)
+	page_end_addr   := darwin.mach_vm_trunc_page(end_addr) + darwin.vm_page_size
+	full_size := page_end_addr - page_start_addr
+
+	data: [^]u8
+	cur_prot : i32 = darwin.VM_PROT_NONE
+	max_prot : i32 = darwin.VM_PROT_NONE
+	if darwin.mach_vm_remap(my_task, &data, full_size, 0, 1, child_task, page_start_addr, false, &cur_prot, &max_prot, darwin.VM_INHERIT_SHARE) != 0 {
+		return
+	}
+
+	start_shim := start_addr - page_start_addr
+	mem_blob := data[start_shim:]
+	return transmute(^T)mem_blob, true
+}
+unmap_child_mem :: proc(my_task: darwin.task_t, orig_addr: u64, mem: $T) {
+	mem_addr := darwin.mach_vm_trunc_page(u64(uintptr(mem)))
+	mem_ptr := transmute([^]u64)rawptr(uintptr(mem_addr))
+
+	start_addr := orig_addr
+	end_addr   := orig_addr + size_of(mem^)
+
+	start_addr = darwin.mach_vm_trunc_page(start_addr)
+	end_addr   = darwin.mach_vm_trunc_page(end_addr) + darwin.vm_page_size
+	full_size := end_addr - start_addr
+
+	darwin.mach_vm_deallocate(my_task, mem_ptr, full_size)
+}
+
+map_child_slice :: proc(my_task: darwin.task_t, child_task: darwin.task_t, addr: u64, size: u64) -> (val: []u8, ok: bool) {
 	start_addr := addr
 	end_addr   := addr + size
 
@@ -55,14 +90,16 @@ map_child_mem :: proc(my_task: darwin.task_t, child_task: darwin.task_t, addr: u
 	}
 
 	start_shim := start_addr - page_start_addr
-	return data[start_shim:], true
+	buf := data[start_shim:]
+	ret_buf := slice.from_ptr(buf, int(size))
+	return ret_buf, true
 }
-unmap_child_mem :: proc(my_task: darwin.task_t, orig_addr: u64, mem: rawptr, size: u64) {
-	mem_addr := darwin.mach_vm_trunc_page(u64(uintptr(mem)))
+unmap_child_slice :: proc(my_task: darwin.task_t, orig_addr: u64, mem: []u8) {
+	mem_addr := darwin.mach_vm_trunc_page(u64(uintptr(raw_data(mem))))
 	mem_ptr := transmute([^]u64)rawptr(uintptr(mem_addr))
 
 	start_addr := orig_addr
-	end_addr   := orig_addr + size
+	end_addr   := orig_addr + u64(len(mem))
 
 	start_addr = darwin.mach_vm_trunc_page(start_addr)
 	end_addr   = darwin.mach_vm_trunc_page(end_addr) + darwin.vm_page_size
@@ -70,6 +107,7 @@ unmap_child_mem :: proc(my_task: darwin.task_t, orig_addr: u64, mem: rawptr, siz
 
 	darwin.mach_vm_deallocate(my_task, mem_ptr, full_size)
 }
+
 
 sample_x86_thread :: proc(my_task: darwin.task_t, child_task: darwin.task_t, thread: darwin.thread_act_t, ts: u64, sample_thread: ^Sample_Thread) -> (ok: bool) {
 	state: darwin.x86_thread_state64_t
@@ -99,15 +137,14 @@ sample_x86_thread :: proc(my_task: darwin.task_t, child_task: darwin.task_t, thr
 			return false
 		}
 
-		slot := map_child_mem(my_task, child_task, bp, size_of(u64)) or_return
+		slot := map_child_mem(my_task, child_task, bp, u64) or_return
 
 		append(callstack, bp)
 		cur_depth += 1
 		sample_thread.max_depth = max(sample_thread.max_depth, cur_depth)
 
-		stack_slot := transmute([^]u64)slot
-		new_bp := stack_slot[0]
-		unmap_child_mem(my_task, bp, slot, size_of(u64))
+		new_bp := slot^
+		unmap_child_mem(my_task, bp, slot)
 
 		bp = new_bp
 	}
@@ -116,9 +153,10 @@ sample_x86_thread :: proc(my_task: darwin.task_t, child_task: darwin.task_t, thr
 }
 
 process_dylibs :: proc(trace: ^Trace, my_task: darwin.task_t, child_task: darwin.task_t, sample_state: ^Sample_State) -> bool {
-	if sample_state.base_addr != 0 {
+	if sample_state.dylibs_checked {
 		return true
 	}
+	sample_state.dylibs_checked = true
 
 	dyld_info := darwin.task_dyld_info{}
 	count : u32 = darwin.TASK_DYLD_INFO_COUNT
@@ -126,40 +164,84 @@ process_dylibs :: proc(trace: ^Trace, my_task: darwin.task_t, child_task: darwin
 		return false
 	}
 
-	image_infos_bytes := map_child_mem(my_task, child_task, dyld_info.all_image_info_addr, size_of(darwin.dyld_all_image_infos)) or_return
-	image_infos := transmute(^darwin.dyld_all_image_infos)image_infos_bytes
+	tmp_buffer := make([]u8, 1024*1024, context.temp_allocator)
 
-	for i : u64 = 0; i < u64(image_infos.info_array_count); i += 1 {
+	image_infos := map_child_mem(my_task, child_task, dyld_info.all_image_info_addr, darwin.dyld_all_image_infos) or_return
+	defer unmap_child_mem(my_task, dyld_info.all_image_info_addr, image_infos)
+
+	dylib_loop: for i : u64 = 0; i < u64(image_infos.info_array_count); i += 1 {
 		info_array_entry_addr := u64(uintptr(image_infos.info_array)) + (i * size_of(darwin.dyld_image_info))
-		entry_bytes := map_child_mem(my_task, child_task, info_array_entry_addr, size_of(darwin.dyld_image_info)) or_return
-		info_entry := transmute(^darwin.dyld_image_info)entry_bytes
+		info_entry, ok := map_child_mem(my_task, child_task, info_array_entry_addr, darwin.dyld_image_info)
+		if !ok { continue dylib_loop }
+		defer unmap_child_mem(my_task, info_array_entry_addr, info_entry)
 
 		file_path_addr := u64(uintptr(rawptr(info_entry.image_file_path)))
-		file_path_bytes := map_child_mem(my_task, child_task, file_path_addr, 512) or_return
-		//fmt.printf("0x%08x -- %s\n", info_entry.image_load_addr, cstring(file_path_bytes))
+		file_path_bytes, ok2 := map_child_mem(my_task, child_task, file_path_addr, [512]u8)
+		if !ok2 { continue dylib_loop }
+		defer unmap_child_mem(my_task, file_path_addr, file_path_bytes)
 
-		file_path := string(cstring(file_path_bytes))
+		file_path := string(cstring(raw_data((file_path_bytes^)[:])))
 
-		// Find the program's base address here
-		if sample_state.base_addr == 0 {
-			if file_path == sample_state.program_path {
-				sample_state.base_addr = info_entry.image_load_addr
-				fmt.printf("Found program base addr: 0x%08x\n", info_entry.image_load_addr)
+		header, ok3 := map_child_mem(my_task, child_task, info_entry.image_load_addr, Mach_Header_64)
+		if !ok3 { continue dylib_loop }
+		cmd_start_addr := info_entry.image_load_addr + size_of(header^)
+		cmd_end_addr := cmd_start_addr + u64(header.cmd_size)
+		defer unmap_child_mem(my_task, info_entry.image_load_addr, header)
+
+		uuid_cmd := Mach_UUID_Command{}
+		symtab_cmd := Mach_Symtab_Command{}
+		header_and_cmds, ok4 := map_child_slice(my_task, child_task, info_entry.image_load_addr, cmd_end_addr - cmd_start_addr)
+		if !ok4 { continue dylib_loop }
+		defer unmap_child_slice(my_task, info_entry.image_load_addr, header_and_cmds)
+
+		j := size_of(Mach_Header_64)
+		for j < len(header_and_cmds) {
+			current_buffer := header_and_cmds[j:]
+			cmd, ok := slice_to_type(current_buffer, Mach_Load_Command)
+			if cmd.size == 0 || !ok {
+				continue dylib_loop
 			}
+
+			if cmd.type == MACH_CMD_UUID {
+				uuid_cmd, ok = slice_to_type(current_buffer, Mach_UUID_Command)
+				if !ok {
+					continue dylib_loop
+				}
+			}
+
+			j += int(cmd.size)
 		}
 
-		unmap_child_mem(my_task, info_array_entry_addr, info_entry, size_of(darwin.dyld_image_info))
-		unmap_child_mem(my_task, file_path_addr, file_path_bytes, 512)
+		exec_buffer, ok5 := os.read_entire_file_from_filename(file_path)
+		if !ok5 {
+			continue dylib_loop
+		}
+		defer delete(exec_buffer)
+
+		append(&trace.func_buckets, FunctionRanges{functions = make([dynamic]Function)})
+		bucket := &trace.func_buckets[len(trace.func_buckets)-1]
+
+		if !load_macho_symbols(trace, exec_buffer, info_entry.image_load_addr, &bucket.functions) {
+			continue dylib_loop
+		}
+
+		debug_path := guess_debug_path(file_path)
+		debug_buffer, ok6 := os.read_entire_file_from_filename(debug_path)
+		if !ok6 {
+			continue dylib_loop
+		}
+		defer delete(debug_buffer)
+
+		if !load_macho_debug(trace, debug_buffer, info_entry.image_load_addr, &bucket.functions) {
+			continue dylib_loop
+		}
 	}
 
 	dyld_path_addr := u64(uintptr(rawptr(image_infos.dyld_path)))
-	dyld_path_bytes := map_child_mem(my_task, child_task, dyld_path_addr, 512) or_return
-	//fmt.printf("0x%08x -- %s\n", image_infos.dyld_image_load_addr, cstring(dyld_path_bytes))
+	dyld_path_bytes := map_child_mem(my_task, child_task, dyld_path_addr, [512]u8) or_return
+	defer unmap_child_mem(my_task, dyld_path_addr, dyld_path_bytes)
 
-	unmap_child_mem(my_task, dyld_path_addr, dyld_path_bytes, 512)
-	unmap_child_mem(my_task, dyld_info.all_image_info_addr, image_infos, size_of(darwin.dyld_all_image_infos))
-
-	return sample_state.base_addr != 0
+	return true
 }
 
 sample_task :: proc(trace: ^Trace, my_task: darwin.task_t, child_task: darwin.task_t, sample_state: ^Sample_State) -> bool {
@@ -332,7 +414,6 @@ sample_child :: proc(trace: ^Trace, program_name: string, args: []string) -> (ok
 	freq, _ := time.tsc_frequency()
 
 	trace.stamp_scale = ((1 / f64(freq)) * 1_000_000_000)
-	trace.base_address = sample_state.base_addr
 
 	proc_idx := setup_pid(trace, 0)
 	process := &trace.processes[proc_idx]
@@ -452,7 +533,6 @@ sample_child :: proc(trace: ^Trace, program_name: string, args: []string) -> (ok
 	}
 	fmt.printf("Sampled %v events\n", trace.event_count)
 
-	load_executable(trace, real_path)
 	generate_color_choices(trace)
 	chunk_events(trace)
 

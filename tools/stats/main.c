@@ -409,5 +409,5 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	printf("Got %llu events\n", event_count);
+	//printf("Got %llu events\n", event_count);
 }

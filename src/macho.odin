@@ -1,12 +1,23 @@
 package main
 
+import "base:intrinsics"
+
 import "core:fmt"
 import "core:strings"
+import "core:path/filepath"
 
-MACH_MAGIC_64 :: 0xfeedfacf
+MACH_FAT_MAGIC :: 0xcafebebe
+MACH_FAT_CIGAM :: 0xbebafeca
+MACH_MAGIC_64  :: 0xfeedfacf
+
+MACH_CPU_ABI_64      :: 0x1000000
+MACH_CPU_TYPE_I386   :: 7
+MACH_CPU_TYPE_X86_64 :: MACH_CPU_TYPE_I386 | MACH_CPU_ABI_64
+MACH_CPU_TYPE_ARM    :: 12
 
 MACH_CMD_SYMTAB      :: 0x2
 MACH_CMD_SEGMENT_64  :: 0x19
+MACH_CMD_UUID        :: 0x1B
 MACH_FILETYPE_EXEC   :: 2
 MACH_FILETYPE_DYLIB  :: 6
 MACH_FILETYPE_DSYM   :: 10
@@ -19,6 +30,18 @@ Mach_Header_64 :: struct #packed {
 	cmd_size:    u32,
 	flags:       u32,
 	reserved:    u32,
+}
+
+Mach_Fat_Header :: struct #packed {
+	magic:          u32,
+	fat_arch_count: u32,
+}
+Mach_Fat_Arch_Header :: struct #packed {
+	cpu_type:    u32,
+	cpu_subtype: u32,
+	offset:      u32,
+	size:        u32,
+	align:       u32,
 }
 
 Mach_Load_Command :: struct #packed {
@@ -64,6 +87,12 @@ Mach_Symtab_Command :: struct #packed {
 	string_table_size:   u32,
 }
 
+Mach_UUID_Command :: struct #packed {
+	type:    u32,
+	size:    u32,
+	uuid: [16]u8,
+}
+
 Mach_Symbol_Entry_64 :: struct #packed {
 	string_table_idx: u32,
 	type: u8,
@@ -72,34 +101,95 @@ Mach_Symbol_Entry_64 :: struct #packed {
 	value: u64,
 }
 
-load_macho_symbols :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
+fmt_macho_debug_id :: proc(uuid: [16]u8) -> string {
+	return fmt.tprintf("%X%X%X%X-%X%X-%X%X-%X%X-%X%X%X%X%X%X",
+		uuid[0], uuid[1], uuid[2], uuid[3], uuid[4],
+		uuid[5], uuid[6], uuid[7], uuid[8], uuid[9],
+		uuid[10], uuid[11], uuid[12], uuid[13], uuid[14], uuid[15],
+	)
+}
+
+guess_debug_path :: proc(file_path: string) -> string {
+	file_base := filepath.base(file_path)
+	b := strings.builder_make(context.temp_allocator)
+	strings.write_string(&b, file_path)
+	strings.write_string(&b, ".dSYM/Contents/Resources/DWARF/")
+	strings.write_string(&b, file_base)
+	
+	return strings.to_string(b)
+}
+
+load_macho_symbols :: proc(trace: ^Trace, _exec_buffer: []u8, base_addr: u64, functions: ^[dynamic]Function) -> bool {
+	exec_buffer := _exec_buffer
 	if len(exec_buffer) < size_of(Mach_Header_64) {
 		return false
 	}
 
-	header := slice_to_type(exec_buffer, Mach_Header_64) or_return
+	read_idx := 0
+	magic := slice_to_type(exec_buffer, u32) or_return
+	if magic == MACH_FAT_CIGAM {
+		header := slice_to_type(exec_buffer[read_idx:], Mach_Fat_Header) or_return
+		read_idx += size_of(header)
+
+		header.fat_arch_count = intrinsics.byte_swap(header.fat_arch_count)
+
+		for i := 0; i < int(header.fat_arch_count); i += 1 {
+			arch_header := slice_to_type(exec_buffer[read_idx:], Mach_Fat_Arch_Header) or_return
+			read_idx += size_of(arch_header)
+
+			arch_header.cpu_type = intrinsics.byte_swap(arch_header.cpu_type)
+			arch_header.cpu_subtype = intrinsics.byte_swap(arch_header.cpu_subtype)
+			arch_header.offset = intrinsics.byte_swap(arch_header.offset)
+			arch_header.size = intrinsics.byte_swap(arch_header.size)
+			arch_header.align = intrinsics.byte_swap(arch_header.align)
+
+			if arch_header.cpu_type == MACH_CPU_TYPE_X86_64 {
+				exec_buffer = exec_buffer[arch_header.offset:]
+				read_idx = 0
+				break
+			}
+		}
+	}
+
+	header := slice_to_type(exec_buffer[read_idx:], Mach_Header_64) or_return
 	if !(header.file_type == MACH_FILETYPE_EXEC || header.file_type == MACH_FILETYPE_DYLIB) {
 		return false
 	}
+	if header.magic != MACH_MAGIC_64 {
+		fmt.printf("we don't handle big endian mach files\n")
+		return false
+	}
+	read_idx += size_of(header)
 
 	symtab_header := Mach_Symtab_Command{}
+	text_segment_offset : u64 = max(u64)
 
-	read_idx := size_of(Mach_Header_64)
 	for read_idx < len(exec_buffer) {
 		current_buffer := exec_buffer[read_idx:]
-		cmd := slice_to_type(exec_buffer[read_idx:], Mach_Load_Command) or_return
+		cmd := slice_to_type(current_buffer, Mach_Load_Command) or_return
 		if cmd.size == 0 {
 			return false
 		}
 
+		if cmd.type == MACH_CMD_SEGMENT_64 {
+			segment_header := slice_to_type(current_buffer, Mach_Segment_64_Command) or_return
+			segment_name := strings.string_from_null_terminated_ptr(raw_data(segment_header.name[:]), 16)
+			if segment_name == "__TEXT" {
+				text_segment_offset = segment_header.address
+			}
+		}
+
 		if cmd.type == MACH_CMD_SYMTAB {
-			symtab_header = slice_to_type(exec_buffer[read_idx:], Mach_Symtab_Command) or_return
+			symtab_header = slice_to_type(current_buffer, Mach_Symtab_Command) or_return
 			break
 		}
 
 		read_idx += int(cmd.size)
 	}
 	if read_idx >= len(exec_buffer) {
+		return false
+	}
+	if text_segment_offset == max(u64) {
 		return false
 	}
 
@@ -117,7 +207,7 @@ load_macho_symbols :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 		symbol := slice_to_type(symbol_buffer, Mach_Symbol_Entry_64) or_return
 		symbol_name := string(cstring(raw_data(string_table_bytes[symbol.string_table_idx:])))
 
-		if symbol_name == "" {
+		if symbol_name == "" || symbol.value == 0 {
 			continue
 		}
 
@@ -127,13 +217,19 @@ load_macho_symbols :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 		}
 
 		sym_idx := in_get(&trace.intern, &trace.string_block, demangled_name)
-		non_zero_append(&trace.functions, Function{name = sym_idx, low_pc = symbol.value, high_pc = symbol.value})
+		sym_addr := base_addr + symbol.value - text_segment_offset
+		if len(functions) > 1 {
+			prev_func := &functions[len(functions) - 1]
+			prev_func.high_pc = sym_addr - 1
+			str := in_getstr(&trace.string_block, prev_func.name)
+		}
+		non_zero_append(functions, Function{name = sym_idx, low_pc = sym_addr, high_pc = sym_addr})
 	}
 
 	return true
 }
 
-load_macho_debug :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
+load_macho_debug :: proc(trace: ^Trace, exec_buffer: []u8, base_addr: u64, functions: ^[dynamic]Function) -> bool {
 	if len(exec_buffer) < size_of(Mach_Header_64) {
 		return false
 	}
@@ -200,8 +296,6 @@ load_macho_debug :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 		return false
 	}
 
-	trace.base_address -= text_segment_offset
-
 	sections := Sections{}
 	sections.abbrev    = create_subbuffer(exec_buffer, u64(abbrev_section.offset), abbrev_section.size) or_return
 	sections.info      = create_subbuffer(exec_buffer, u64(info_section.offset), info_section.size) or_return
@@ -210,7 +304,7 @@ load_macho_debug :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 	sections.ranges    = create_subbuffer(exec_buffer, u64(ranges_section.offset),  ranges_section.size) or_return
 
 	// Start parsing DWARF normally from here
-	if !load_dwarf(trace, &sections) {
+	if !load_dwarf(trace, &sections, base_addr + text_segment_offset, functions) {
 		fmt.printf("DWARF parsing failed!\n")
 	}
 

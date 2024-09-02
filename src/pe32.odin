@@ -142,7 +142,7 @@ get_pdb_path :: proc(rdr: ^Stream_Context, section_hdr: COFF_Section_Header, deb
 	return string(pdb_cstr), true
 }
 
-load_pe32 :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
+load_pe32 :: proc(trace: ^Trace, exec_buffer: []u8, functions: ^[dynamic]Function) -> bool {
 	pdb_path := ""
 	dos_end_offset := 0x3c
 
@@ -233,10 +233,10 @@ load_pe32 :: proc(trace: ^Trace, exec_buffer: []u8) -> bool {
 		pdb_buffer := os.read_entire_file_from_filename(pdb_path) or_return
 		defer delete(pdb_buffer)
 
-		return load_pdb(trace, section_buffer, pdb_buffer)
+		return load_pdb(trace, section_buffer, pdb_buffer, functions)
 
 	// Do we have DWARF?
 	} else {
-		return load_dwarf(trace, &sections)
+		return load_dwarf(trace, &sections, 0, functions)
 	}
 }

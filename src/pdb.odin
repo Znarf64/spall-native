@@ -202,7 +202,7 @@ Line :: struct {
 	inline: bool,
 }
 
-load_pdb :: proc(trace: ^Trace, section_buffer: []u8, pdb_buffer: []u8) -> bool {
+load_pdb :: proc(trace: ^Trace, section_buffer: []u8, pdb_buffer: []u8, functions: ^[dynamic]Function) -> bool {
 	msf_hdr := slice_to_type(pdb_buffer, PDB_MSF_Header) or_return
 	if !bytes.equal(msf_hdr.magic[:], PDB_MAGIC) {
 		return false
@@ -334,7 +334,7 @@ load_pdb :: proc(trace: ^Trace, section_buffer: []u8, pdb_buffer: []u8) -> bool 
 					low_pc := base_addr + u64(proc_symbol.offset)
 					high_pc := low_pc + u64(proc_symbol.proc_length)
 					sym_idx := in_get(&trace.intern, &trace.string_block, symbol_name)
-					non_zero_append(&trace.functions, Function{name = sym_idx, low_pc = low_pc, high_pc = high_pc})
+					non_zero_append(functions, Function{name = sym_idx, low_pc = low_pc, high_pc = high_pc})
 				}
 			}
 
