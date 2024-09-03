@@ -825,6 +825,10 @@ get_function :: proc(trace: ^Trace, addr: u64) -> (u64, bool) {
 		return 0, false
 	}
 
+	if len(cur_bucket.functions) == 0 {
+		return 0, false
+	}
+
 	low_pc := cur_bucket.functions[0].low_pc
 	high_pc := cur_bucket.functions[len(cur_bucket.functions)-1].high_pc
 
@@ -863,6 +867,9 @@ get_function :: proc(trace: ^Trace, addr: u64) -> (u64, bool) {
 get_line_info :: proc(trace: ^Trace, addr: u64) -> (string, u64, bool) {
 	cur_bucket, ok := get_bucket(trace, addr)
 	if !ok {
+		return "", 0, false
+	}
+	if len(cur_bucket.line_info) == 0 {
 		return "", 0, false
 	}
 
