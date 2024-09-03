@@ -1541,7 +1541,6 @@ draw_stats :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 
 		called_val := LineVal{-1, ""}
 		defined_val := LineVal{-1, ""}
-		addr_val    := LineVal{-1, ""}
 		if ev.has_addr {
 			file, line, ok := get_line_info(trace, ev.args)
 			if ok {
@@ -1558,14 +1557,14 @@ draw_stats :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 				defined_val = LineVal{y, loc_str}
 				draw_text(gfx, line_str, Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 			}
-
-			if enable_debug {
-				addr_str := fmt.tprintf("   address: 0x%08x", ev.id - trace.base_address)
-				addr_val = LineVal{y, addr_str}
-				draw_text(gfx, addr_str, Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
-			}
 		}
 
+		if enable_debug {
+			cur_bucket, ok := get_bucket(trace, ev.id)
+			if ok {
+				draw_text(gfx, fmt.tprintf("source: %s", cur_bucket.source_path), Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
+			}
+		}
 		draw_text(gfx, fmt.tprintf("start time: %s", time_fmt(disp_time(trace, f64(ev.timestamp - trace.total_min_time)))), Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 		draw_text(gfx, fmt.tprintf("  duration: %s", time_fmt(disp_time(trace, f64(bound_duration(&ev, thread.max_time))))), Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
 		draw_text(gfx, fmt.tprintf(" self time: %s", time_fmt(disp_time(trace, f64(ev.self_time)))), Vec2{text_x, next_line(&y, em)}, .PSize, .MonoFont, text_color)
@@ -1591,12 +1590,6 @@ draw_stats :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 		if button(gfx, Rect{stats_pane_x, text_val.y, button_height, button_width}, 
 				  "\uf0ea", "Copy Function Name", .IconFont, 0, ui_state.width) {
 			set_clipboard(gfx, text_val.str)
-		}
-		if addr_val.y != -1 {
-			if button(gfx, Rect{stats_pane_x, addr_val.y, button_height, button_width}, 
-					  "\uf0ea", "Copy Address", .IconFont, 0, ui_state.width) {
-				set_clipboard(gfx, addr_val.str)
-			}
 		}
 
 		// If we've got stats cooking already

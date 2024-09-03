@@ -298,8 +298,11 @@ CU_File_Entry :: struct {
 	file_idx: u64,
 }
 
-FunctionRanges :: struct {
+Func_Bucket :: struct {
+	source_path: string,
+	base_address: u64,
 	functions: [dynamic]Function,
+	line_info: [dynamic]Line_Info,
 }
 
 COLOR_CHOICES :: 64
@@ -311,11 +314,9 @@ Trace :: struct {
 	intern: INMap,
 	string_block: [dynamic]string,
 
-	base_address:                u64,
 	skew_size:                   u64,
 	filename_map:     strings.Intern,
-	line_info:    [dynamic]Line_Info,
-	func_buckets: [dynamic]FunctionRanges,
+	func_buckets: [dynamic]Func_Bucket,
 
 	color_choices: [COLOR_CHOICES]FVec3,
 

@@ -218,10 +218,15 @@ process_dylibs :: proc(trace: ^Trace, my_task: darwin.task_t, child_task: darwin
 		}
 		defer delete(exec_buffer)
 
-		append(&trace.func_buckets, FunctionRanges{functions = make([dynamic]Function)})
+		append(&trace.func_buckets, Func_Bucket{
+			source_path = strings.clone(file_path),
+			base_address = info_entry.image_load_addr,
+			functions = make([dynamic]Function),
+			line_info = make([dynamic]Line_Info),
+		})
 		bucket := &trace.func_buckets[len(trace.func_buckets)-1]
 
-		if !load_macho_symbols(trace, exec_buffer, info_entry.image_load_addr, &bucket.functions) {
+		if !load_macho_symbols(trace, exec_buffer, bucket) {
 			continue dylib_loop
 		}
 
@@ -232,7 +237,7 @@ process_dylibs :: proc(trace: ^Trace, my_task: darwin.task_t, child_task: darwin
 		}
 		defer delete(debug_buffer)
 
-		if !load_macho_debug(trace, debug_buffer, info_entry.image_load_addr, &bucket.functions) {
+		if !load_macho_debug(trace, debug_buffer, bucket) {
 			continue dylib_loop
 		}
 	}

@@ -905,15 +905,7 @@ parse_die :: proc(ctx: ^DWARF_Context, rdr: ^Stream_Context, abbrevs: []Abbrev_U
 	return int(abbrev_idx), .Pass
 }
 
-add_func :: proc(functions: ^[dynamic]Function, sym_idx: u64, low_pc: u64, high_pc: u64, rel_off: u64) {
-	_low_pc := low_pc - rel_off
-	_high_pc := high_pc
-
-	real_high := max(_low_pc, _high_pc - 1) - rel_off
-	non_zero_append(functions, Function{name = sym_idx, low_pc = _low_pc, high_pc = real_high})
-}
-
-parse_range_table :: proc(ctx: ^DWARF_Context, cu: ^CU_Unit, val: Attr_Data, sym_idx: u64, functions: ^[dynamic]Function, rel_off: u64) -> (ok: bool) {
+parse_range_table :: proc(ctx: ^DWARF_Context, cu: ^CU_Unit, val: Attr_Data, sym_idx: u64, bucket: ^Func_Bucket, text_skew: u64) -> (ok: bool) {
 	new_low := max(u64)
 
 	ranges_off : u64 = 0
@@ -937,7 +929,7 @@ parse_range_table :: proc(ctx: ^DWARF_Context, cu: ^CU_Unit, val: Attr_Data, sym
 		return
 	}
 
-	base_addr : u64 = cu.low_pc
+	func_base_addr : u64 = cu.low_pc
 
 	switch ctx.version {
 	case 5:
@@ -960,7 +952,7 @@ parse_range_table :: proc(ctx: ^DWARF_Context, cu: ^CU_Unit, val: Attr_Data, sym
 				idx := stream_uleb(&rdr) or_return
 				addr := read_debug_addr(ctx, cu, idx) or_return
 
-				base_addr = addr
+				func_base_addr = addr
 
 			case .startx_endx:
 				start_idx := stream_uleb(&rdr) or_return
@@ -969,7 +961,7 @@ parse_range_table :: proc(ctx: ^DWARF_Context, cu: ^CU_Unit, val: Attr_Data, sym
 				low_pc := read_debug_addr(ctx, cu, start_idx) or_return
 				high_pc := read_debug_addr(ctx, cu, end_idx) or_return
 
-				add_func(functions, sym_idx, low_pc, high_pc, rel_off)
+				add_func(bucket, sym_idx, low_pc, high_pc, text_skew)
 
 			case .startx_length:
 				start_idx := stream_uleb(&rdr) or_return
@@ -977,29 +969,29 @@ parse_range_table :: proc(ctx: ^DWARF_Context, cu: ^CU_Unit, val: Attr_Data, sym
 
 				low_pc := read_debug_addr(ctx, cu, start_idx) or_return
 
-				add_func(functions, sym_idx, low_pc, low_pc + length, rel_off)
+				add_func(bucket, sym_idx, low_pc, low_pc + length, text_skew)
 
 			case .offset_pair:
 				low_pc  := stream_uleb(&rdr) or_return
 				high_pc := stream_uleb(&rdr) or_return
 
-				add_func(functions, sym_idx, base_addr + low_pc, base_addr + high_pc, rel_off)
+				add_func(bucket, sym_idx, func_base_addr + low_pc, func_base_addr + high_pc, text_skew)
 
 			case .base_address:
 				addr := stream_val(&rdr, u64) or_return
-				base_addr = addr
+				func_base_addr = addr
 
 			case .start_end:
 				low_pc := stream_val(&rdr, u64) or_return
 				high_pc := stream_val(&rdr, u64) or_return
 				
-				add_func(functions, sym_idx, low_pc, high_pc, rel_off)
+				add_func(bucket, sym_idx, low_pc, high_pc, text_skew)
 
 			case .start_length:
 				addr := stream_val(&rdr, u64) or_return
 				length := stream_uleb(&rdr) or_return
 
-				add_func(functions, sym_idx, addr, addr + length, rel_off)
+				add_func(bucket, sym_idx, addr, addr + length, text_skew)
 				
 			case:
 				fmt.printf("unhandled range type: %v\n", type)
@@ -1028,10 +1020,10 @@ parse_range_table :: proc(ctx: ^DWARF_Context, cu: ^CU_Unit, val: Attr_Data, sym
 			}
 
 			if low_pc == max(u64) {
-				base_addr = high_pc
+				func_base_addr = high_pc
 			}
 			
-			add_func(functions, sym_idx, base_addr + low_pc, base_addr + high_pc, rel_off)
+			add_func(bucket, sym_idx, func_base_addr + low_pc, func_base_addr + high_pc, text_skew)
 		}
 	case:
 		panic("Ranges for DWARF %v not supported!\n", ctx.version)
@@ -1458,7 +1450,7 @@ process_line_info :: proc(trace: ^Trace, ctx: ^DWARF_Context, cu_files_list: ^[d
 	return true
 }
 
-load_dwarf :: proc(trace: ^Trace, sections: ^Sections, rel_off: u64, functions: ^[dynamic]Function) -> bool {
+load_dwarf :: proc(trace: ^Trace, sections: ^Sections, bucket: ^Func_Bucket, text_skew: u64) -> bool {
 	ctx := DWARF_Context{}
 	ctx.sections = sections
 
@@ -1634,11 +1626,11 @@ load_dwarf :: proc(trace: ^Trace, sections: ^Sections, rel_off: u64, functions: 
 						fmt.printf("Invalid function range!\n")
 						return false
 					}
-					add_func(functions, sym_idx, low_pc, high_pc, rel_off)
+					add_func(bucket, sym_idx, low_pc, high_pc, text_skew)
 				} else {
 					ranges_val := get_attr(attr_scratch[:], .ranges)
 					if ranges_val != nil {
-						if !parse_range_table(&ctx, &cu, ranges_val, sym_idx, functions, rel_off) {
+						if !parse_range_table(&ctx, &cu, ranges_val, sym_idx, bucket, text_skew) {
 							break
 						}
 					}
@@ -1656,19 +1648,19 @@ load_dwarf :: proc(trace: ^Trace, sections: ^Sections, rel_off: u64, functions: 
 			if !ok {
 				continue
 			}
-			non_zero_append(&trace.line_info, Line_Info{line.address, line.line_num, name})
+			add_line_info(bucket, line.address, line.line_num, name, text_skew)
 		}
 	}
 	line_order :: proc(a, b: Line_Info) -> bool {
 		return a.address < b.address
 	}
-	slice.sort_by(trace.line_info[:], line_order)
+	slice.sort_by(bucket.line_info[:], line_order)
 
 	fmt.printf("DWARF: sorting functions\n")
 	func_order :: proc(a, b: Function) -> bool {
 		return a.low_pc < b.low_pc
 	}
-	slice.sort_by(functions[:], func_order)
+	slice.sort_by(bucket.functions[:], func_order)
 	/*
 	for func in functions {
 		fmt.printf("%s - 0x%08x -> 0x%08x\n", in_getstr(&trace.string_block, func.name), func.low_pc, func.high_pc)

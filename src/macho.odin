@@ -119,7 +119,7 @@ guess_debug_path :: proc(file_path: string) -> string {
 	return strings.to_string(b)
 }
 
-load_macho_symbols :: proc(trace: ^Trace, _exec_buffer: []u8, base_addr: u64, functions: ^[dynamic]Function) -> bool {
+load_macho_symbols :: proc(trace: ^Trace, _exec_buffer: []u8, bucket: ^Func_Bucket) -> bool {
 	exec_buffer := _exec_buffer
 	if len(exec_buffer) < size_of(Mach_Header_64) {
 		return false
@@ -217,19 +217,20 @@ load_macho_symbols :: proc(trace: ^Trace, _exec_buffer: []u8, base_addr: u64, fu
 		}
 
 		sym_idx := in_get(&trace.intern, &trace.string_block, demangled_name)
-		sym_addr := base_addr + symbol.value - text_segment_offset
-		if len(functions) > 1 {
-			prev_func := &functions[len(functions) - 1]
+		sym_addr := bucket.base_address + symbol.value - text_segment_offset
+		if len(bucket.functions) > 1 {
+			prev_func := &bucket.functions[len(bucket.functions) - 1]
 			prev_func.high_pc = sym_addr - 1
 			str := in_getstr(&trace.string_block, prev_func.name)
+			//fmt.printf("0x%08x - 0x%08x | %s\n", prev_func.low_pc, prev_func.high_pc, str)
 		}
-		non_zero_append(functions, Function{name = sym_idx, low_pc = sym_addr, high_pc = sym_addr})
+		non_zero_append(&bucket.functions, Function{name = sym_idx, low_pc = sym_addr, high_pc = sym_addr})
 	}
 
 	return true
 }
 
-load_macho_debug :: proc(trace: ^Trace, exec_buffer: []u8, base_addr: u64, functions: ^[dynamic]Function) -> bool {
+load_macho_debug :: proc(trace: ^Trace, exec_buffer: []u8, bucket: ^Func_Bucket) -> bool {
 	if len(exec_buffer) < size_of(Mach_Header_64) {
 		return false
 	}
@@ -303,8 +304,7 @@ load_macho_debug :: proc(trace: ^Trace, exec_buffer: []u8, base_addr: u64, funct
 	sections.debug_str = create_subbuffer(exec_buffer, u64(debug_str_section.offset),  debug_str_section.size) or_return
 	sections.ranges    = create_subbuffer(exec_buffer, u64(ranges_section.offset),  ranges_section.size) or_return
 
-	// Start parsing DWARF normally from here
-	if !load_dwarf(trace, &sections, base_addr + text_segment_offset, functions) {
+	if !load_dwarf(trace, &sections, bucket, text_segment_offset) {
 		fmt.printf("DWARF parsing failed!\n")
 	}
 

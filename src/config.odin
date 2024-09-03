@@ -138,7 +138,6 @@ free_trace :: proc(trace: ^Trace) {
 	delete(trace.string_block)
 	delete(trace.file_name)
 	strings.intern_destroy(&trace.filename_map)
-	delete(trace.line_info)
 
 	delete(trace.stats.selected_ranges)
 	sm_free(&trace.stats.stat_map)
@@ -146,6 +145,7 @@ free_trace :: proc(trace: ^Trace) {
 
 	for &bucket in trace.func_buckets {
 		delete(bucket.functions)
+		delete(bucket.line_info)
 	}
 	delete(trace.func_buckets)
 }
@@ -498,14 +498,15 @@ tid_sort_proc :: proc(a, b: Thread) -> bool  { return a.min_time < b.min_time }
 
 Load_Symbols_Args :: struct {
 	trace: ^Trace,
+	base_addr: u64,
 	path:  string,
 }
 load_symbols_task :: proc(pool: ^Pool, raw_args: rawptr) {
 	args := cast(^Load_Symbols_Args)(raw_args)
-	load_executable(args.trace, args.path)
+	load_executable(args.trace, args.path, args.base_addr)
 }
 
-load_executable :: proc(trace: ^Trace, file_name: string) -> bool {
+load_executable :: proc(trace: ^Trace, file_name: string, base_addr: u64) -> bool {
 	fmt.printf("Loading symbols from %s\n", file_name)
 
 	exec_buffer, ok := os.read_entire_file_from_filename(file_name)
@@ -520,19 +521,19 @@ load_executable :: proc(trace: ^Trace, file_name: string) -> bool {
 		return false
 	}
 	
-	append(&trace.func_buckets, FunctionRanges{functions = make([dynamic]Function)})
+	append(&trace.func_buckets, Func_Bucket{source_path = file_name, base_address = base_addr, functions = make([dynamic]Function)})
 	bucket := &trace.func_buckets[len(trace.func_buckets)-1]
 
 	magic_chunk := (^u32)(raw_data(exec_buffer[:4]))^
 	if bytes.equal(exec_buffer[:4], ELF_MAGIC) {
-		ok := load_elf(trace, exec_buffer, &bucket.functions)
+		ok := load_elf(trace, exec_buffer, bucket)
 		if !ok {
 			post_error(trace, "Failed to parse ELF!")
 			return false
 		}
 	} else if magic_chunk == MACH_MAGIC_64 {
 
-		ok := load_macho_symbols(trace, exec_buffer, 0, &bucket.functions)
+		ok := load_macho_symbols(trace, exec_buffer, bucket)
 		if !ok {
 			post_error(trace, "Failed to parse Mach-O!")
 			return false
@@ -546,9 +547,9 @@ load_executable :: proc(trace: ^Trace, file_name: string) -> bool {
 		}
 		defer delete(debug_buffer)
 
-		load_macho_debug(trace, debug_buffer, 0, &bucket.functions)
+		load_macho_debug(trace, debug_buffer, bucket)
 	} else if bytes.equal(exec_buffer[:2], DOS_MAGIC) {
-		ok := load_pe32(trace, exec_buffer, &bucket.functions)
+		ok := load_pe32(trace, exec_buffer, bucket)
 		if !ok {
 			post_error(trace, "Failed to parse PE32!")
 			return false
@@ -568,7 +569,7 @@ init_trace_allocs :: proc(trace: ^Trace, file_name: string) {
 	trace.process_map  = vh_init()
 	trace.string_block = make([dynamic]string)
 	trace.intern       = in_init()
-	trace.func_buckets = make([dynamic]FunctionRanges)
+	trace.func_buckets = make([dynamic]Func_Bucket)
 
 	trace.stats.selected_ranges = make([dynamic]Range)
 	trace.stats.stat_map        = sm_init()
@@ -576,7 +577,6 @@ init_trace_allocs :: proc(trace: ^Trace, file_name: string) {
 	trace.base_name = filepath.base(file_name)
 	trace.file_name = file_name
 
-	trace.line_info = make([dynamic]Line_Info)
 	strings.intern_init(&trace.filename_map)
 	non_zero_append(&trace.string_block, "")
 }
@@ -687,8 +687,7 @@ load_spall_file :: proc(loader: ^Loader, trace: ^Trace, file_name: string) {
 		}
 		
 		trace.stamp_scale = hdr.timestamp_unit
-		trace.base_address = hdr.base_address
-		fmt.printf("Base address of executable: 0x%08x\n", trace.base_address)
+		fmt.printf("Base address of executable: 0x%08x\n", hdr.base_address)
 
 		path_buffer := header_buffer[size_of(spall_fmt.Auto_Header):][:hdr.program_path_len]
 		symbol_path := string(path_buffer)
@@ -699,6 +698,7 @@ load_spall_file :: proc(loader: ^Loader, trace: ^Trace, file_name: string) {
 
 		sym_args := new(Load_Symbols_Args)
 		sym_args.trace = trace
+		sym_args.base_addr = hdr.base_address
 		sym_args.path = symbol_path
 
 		pool_add_task(&loader.pool, Pool_Task{load_symbols_task, sym_args})
@@ -792,26 +792,36 @@ ev_name :: proc(trace: ^Trace, ev: ^Event) -> string {
 	return in_getstr(&trace.string_block, name_idx)
 }
 
-get_function :: proc(trace: ^Trace, _addr: u64) -> (u64, bool) {
+get_bucket :: proc(trace: ^Trace, addr: u64) -> (^Func_Bucket, bool) {
 	if len(trace.func_buckets) == 0 {
-		return 0, false
+		return nil, false
 	}
 
-	addr := _addr - trace.base_address
-
-	cur_bucket: ^FunctionRanges = nil
+	cur_bucket: ^Func_Bucket = nil
 	for &bucket in trace.func_buckets {
 		if len(bucket.functions) == 0 {
 			continue
 		}
 
-		if _addr >= bucket.functions[0].low_pc &&
-		   _addr <= bucket.functions[len(bucket.functions)-1].high_pc {
+		first_func := bucket.functions[0]
+		last_func := bucket.functions[len(bucket.functions)-1]
+		if addr >= first_func.low_pc &&
+		   addr <= last_func.high_pc {
+			//fmt.printf("0x%08x | [0x%08x - 0x%08x]\n", _addr, first_func.low_pc, last_func.high_pc)
 			cur_bucket = &bucket
 			break
 		}
 	}
 	if cur_bucket == nil {
+		return nil, false
+	}
+
+	return cur_bucket, true
+}
+
+get_function :: proc(trace: ^Trace, addr: u64) -> (u64, bool) {
+	cur_bucket, ok := get_bucket(trace, addr)
+	if !ok {
 		return 0, false
 	}
 
@@ -850,15 +860,14 @@ get_function :: proc(trace: ^Trace, _addr: u64) -> (u64, bool) {
 	return 0, false
 }
 
-get_line_info :: proc(trace: ^Trace, _addr: u64) -> (string, u64, bool) {
-	if len(trace.line_info) == 0 {
+get_line_info :: proc(trace: ^Trace, addr: u64) -> (string, u64, bool) {
+	cur_bucket, ok := get_bucket(trace, addr)
+	if !ok {
 		return "", 0, false
 	}
 
-	addr := _addr - trace.base_address
-
-	line_info_start := trace.line_info[0].address
-	line_info_end := trace.line_info[len(trace.line_info)-1].address
+	line_info_start := cur_bucket.line_info[0].address
+	line_info_end := cur_bucket.line_info[len(cur_bucket.line_info)-1].address
 
 	// make sure address is within line-info bounds
 	if line_info_start > addr || line_info_end < addr {
@@ -866,13 +875,13 @@ get_line_info :: proc(trace: ^Trace, _addr: u64) -> (string, u64, bool) {
 	}
 
 	low := 0
-	max := len(trace.line_info)
+	max := len(cur_bucket.line_info)
 	high := max - 1
 
 	for low < high {
 		mid := (low + high) / 2
 
-		line_info := trace.line_info[mid]
+		line_info := cur_bucket.line_info[mid]
 		if addr == line_info.address {
 			return line_info.filename, line_info.line_num, true
 		} else if addr > line_info.address { 
@@ -882,7 +891,7 @@ get_line_info :: proc(trace: ^Trace, _addr: u64) -> (string, u64, bool) {
 		}
 	}
 
-	line_info := trace.line_info[low]
+	line_info := cur_bucket.line_info[low]
 
 	if addr == line_info.address {
 		return line_info.filename, line_info.line_num, true
@@ -890,4 +899,21 @@ get_line_info :: proc(trace: ^Trace, _addr: u64) -> (string, u64, bool) {
 
 	//fmt.printf("Failed to match: 0x08%x\n", addr)
 	return "", 0, false
+}
+
+add_line_info :: proc(bucket: ^Func_Bucket, _addr: u64, line_num: u64, name: string, text_skew: u64) {
+	addr := (bucket.base_address + _addr) - text_skew
+
+	line := Line_Info{address = addr, filename = name, line_num = line_num}
+	non_zero_append(&bucket.line_info, line)
+}
+
+add_func :: proc(bucket: ^Func_Bucket, sym_idx: u64, low_pc: u64, high_pc: u64, text_skew: u64) {
+	_low_pc := (bucket.base_address + low_pc) - text_skew
+	_high_pc := (bucket.base_address + high_pc) - text_skew
+
+	real_high := max(_low_pc, _high_pc - 1)
+	func := Function{name = sym_idx, low_pc = _low_pc, high_pc = real_high}
+	//fmt.printf("func: 0x%08x - 0x%08x, got: 0x%08x - 0x%08x\n", func.low_pc, func.high_pc, low_pc, high_pc)
+	non_zero_append(&bucket.functions, func)
 }
