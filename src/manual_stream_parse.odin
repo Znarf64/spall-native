@@ -268,9 +268,6 @@ ms_v2_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, th
 			self_time = 0,
 			timestamp = max(i64(event.time), thread.zero_patchup),
 		}
-		if ev.timestamp > thread.zero_patchup {
-			thread.zero_patchup = -1
-		}
 
 		if thread.max_time > ev.timestamp {
 			post_error(trace, 
@@ -319,13 +316,9 @@ ms_v2_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, th
 			jev := &depth.events[jev_idx]
 			jev.duration = i64(event.time) - jev.timestamp
 			if jev.duration == 0 {
-				if thread.zero_patchup == -1 {
-					thread.zero_patchup = i64(event.time)
-				}
+				thread.zero_patchup = i64(event.time)
 				thread.zero_patchup += 1
 				jev.duration = 1
-			} else {
-				thread.zero_patchup = -1
 			}
 			jev.self_time = jev.duration - jev.self_time
 			thread.max_time = max(thread.max_time, jev.timestamp + jev.duration)
