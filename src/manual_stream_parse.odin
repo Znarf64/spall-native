@@ -344,6 +344,30 @@ ms_v2_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, th
 
 		p.pos += event_sz + i64(event.size)
 		return .EventRead
+	case .Name_Thread: fallthrough
+	case .Name_Process:
+		event_sz := i64(size_of(spall_fmt.Name_Container))
+		if chunk_pos(p) + event_sz > i64(len(chunk)) {
+			return .PartialRead
+		}
+		event := (^spall_fmt.Name_Container)(raw_data(data_start))
+		event_tail := i64(event.name_len)
+		if (chunk_pos(p) + event_sz + event_tail) > i64(len(chunk)) {
+			return .PartialRead
+		}
+
+		raw_name := string(data_start[event_sz:event_sz+i64(event.name_len)])
+		name := in_get(&trace.intern, &trace.string_block, raw_name)
+
+		#partial switch type {
+		case .Name_Thread:
+			thread.name = name
+		case .Name_Process:
+			process.name = name
+		}
+
+		p.pos += event_sz + event_tail
+		return .EventRead
 	case:
 		post_error(trace, "Invalid event type: 0x%x in file, offset: 0x%x", data_start[0], p.pos)
 		return .Failure
