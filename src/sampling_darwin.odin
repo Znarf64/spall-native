@@ -43,10 +43,6 @@ Sample_State :: struct {
 	dylibs_checked: bool,
 }
 
-foreign freq {
-    get_frequency :: proc() -> u64 ---
-}
-
 map_child_mem :: proc(my_task: darwin.task_t, child_task: darwin.task_t, addr: u64, $T: typeid) -> (val: ^T, ok: bool) {
 	start_addr := addr
 	end_addr   := addr + size_of(T)
@@ -404,8 +400,10 @@ sample_child :: proc(trace: ^Trace, program_name: string, path: string, args: []
 	dir, err := os2.get_working_directory(context.temp_allocator)
 	if err != nil { return }
 
-	err = os2.set_working_directory(path)
-	if err != nil { return }
+	if path != "" {
+		err = os2.set_working_directory(path)
+		if err != nil { return }
+	}
 
 	envs[i] = fmt.tprintf("DYLD_INSERT_LIBRARIES=%s/tools/osx_dylib_sample/%s", dir, "same.dylib")
 
@@ -487,7 +485,7 @@ sample_child :: proc(trace: ^Trace, program_name: string, path: string, args: []
 		}
     }
 
-	freq := int(get_frequency())
+	freq, _ := time.tsc_frequency()
 
 	trace.stamp_scale = ((1 / f64(freq)) * 1_000_000_000)
 
