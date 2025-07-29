@@ -2,7 +2,7 @@
  
 package main
 
-foreign import freq "freq.a"
+import "base:runtime"
 
 import "core:fmt"
 import "core:os"
@@ -54,7 +54,7 @@ map_child_mem :: proc(my_task: darwin.task_t, child_task: darwin.task_t, addr: u
 	data: [^]u8
 	cur_prot : i32 = (i32)(darwin.VM_PROT_NONE)
 	max_prot : i32 = (i32)(darwin.VM_PROT_NONE)
-	if darwin.mach_vm_remap(my_task, &data, full_size, 0, 1, child_task, page_start_addr, false, &cur_prot, &max_prot, darwin.VM_INHERIT_SHARE) != 0 {
+	if darwin.mach_vm_remap(my_task, &data, full_size, 0, 1, child_task, page_start_addr, false, &cur_prot, &max_prot, .Share) != .Success {
 		return
 	}
 
@@ -87,7 +87,7 @@ map_child_slice :: proc(my_task: darwin.task_t, child_task: darwin.task_t, addr:
 	data: [^]u8
 	cur_prot : i32 = (i32)(darwin.VM_PROT_NONE)
 	max_prot : i32 = (i32)(darwin.VM_PROT_NONE)
-	if darwin.mach_vm_remap(my_task, &data, full_size, 0, 1, child_task, page_start_addr, false, &cur_prot, &max_prot, darwin.VM_INHERIT_SHARE) != 0 {
+	if darwin.mach_vm_remap(my_task, &data, full_size, 0, 1, child_task, page_start_addr, false, &cur_prot, &max_prot, .Share) != .Success {
 		return
 	}
 
@@ -113,7 +113,7 @@ unmap_child_slice :: proc(my_task: darwin.task_t, orig_addr: u64, mem: []u8) {
 sample_arm64_thread :: proc(my_task: darwin.task_t, child_task: darwin.task_t, thread: darwin.thread_act_t, ts: u64, sample_thread: ^Sample_Thread) -> (ok: bool) {
 	state: darwin.arm_thread_state64_t
 	state_count: u32 = darwin.ARM_THREAD_STATE64_COUNT
-	if darwin.thread_get_state(thread, darwin.ARM_THREAD_STATE64, darwin.thread_state_t(&state), &state_count) != 0 {
+	if darwin.thread_get_state(thread, darwin.ARM_THREAD_STATE64, darwin.thread_state_t(&state), &state_count) != .Success {
 		return
 	}
 
@@ -165,7 +165,7 @@ sample_arm64_thread :: proc(my_task: darwin.task_t, child_task: darwin.task_t, t
 sample_x86_thread :: proc(my_task: darwin.task_t, child_task: darwin.task_t, thread: darwin.thread_act_t, ts: u64, sample_thread: ^Sample_Thread) -> (ok: bool) {
 	state: darwin.x86_thread_state64_t
 	state_count: u32 = darwin.X86_THREAD_STATE64_COUNT
-	if darwin.thread_get_state(thread, darwin.X86_THREAD_STATE64, darwin.thread_state_t(&state), &state_count) != 0 {
+	if darwin.thread_get_state(thread, darwin.X86_THREAD_STATE64, darwin.thread_state_t(&state), &state_count) != .Success {
 		return
 	}
 
@@ -213,7 +213,7 @@ process_dylibs :: proc(trace: ^Trace, my_task: darwin.task_t, child_task: darwin
 
 	dyld_info := darwin.task_dyld_info{}
 	count : u32 = darwin.TASK_DYLD_INFO_COUNT
-	if darwin.task_info(child_task, darwin.TASK_DYLD_INFO, darwin.task_info_t(&dyld_info), &count) != 0 {
+	if darwin.task_info(child_task, darwin.TASK_DYLD_INFO, darwin.task_info_t(&dyld_info), &count) != .Success {
 		return false
 	}
 
@@ -308,14 +308,14 @@ process_dylibs :: proc(trace: ^Trace, my_task: darwin.task_t, child_task: darwin
 
 sample_task :: proc(trace: ^Trace, my_task: darwin.task_t, child_task: darwin.task_t, sample_state: ^Sample_State) -> bool {
 	ts := time.read_cycle_counter()
-	if darwin.task_suspend(child_task) != 0 {
+	if darwin.task_suspend(child_task) != .Success {
 		return false
 	}
 	defer darwin.task_resume(child_task)
 
 	thread_list: darwin.thread_list_t
 	thread_count: u32
-	if darwin.task_threads(child_task, &thread_list, &thread_count) != 0 {
+	if darwin.task_threads(child_task, &thread_list, &thread_count) != .Success {
 		return false
 	}
 
@@ -326,7 +326,7 @@ sample_task :: proc(trace: ^Trace, my_task: darwin.task_t, child_task: darwin.ta
 
 		id_info := darwin.thread_identifier_info{}
 		count : u32 = darwin.THREAD_IDENTIFIER_INFO_COUNT
-		if darwin.thread_info(thread, darwin.THREAD_IDENTIFIER_INFO, &id_info, &count) != 0 {
+		if darwin.thread_info(thread, darwin.THREAD_IDENTIFIER_INFO, &id_info, &count) != .Success {
 			continue
 		}
 
@@ -359,26 +359,26 @@ MachSampleSetup :: struct {
 sample_setup := MachSampleSetup{}
 sample_child :: proc(trace: ^Trace, program_name: string, path: string, args: []string) -> (ok: bool) {
 	if !sample_setup.has_setup {
-		sample_setup.my_task = darwin.mach_task_self()
-		if darwin.mach_port_allocate(sample_setup.my_task, darwin.MACH_PORT_RIGHT_RECEIVE, &sample_setup.recv_port) != 0 {
+		sample_setup.my_task = darwin.task_t(darwin.mach_task_self())
+		if darwin.mach_port_allocate(sample_setup.my_task, .Receive, &sample_setup.recv_port) != .Success {
 			fmt.printf("failed to allocate port\n")
 			return
 		}
 
-		if darwin.task_get_special_port(sample_setup.my_task, darwin.TASK_BOOTSTRAP_PORT, &sample_setup.bootstrap_port) != 0 {
+		if darwin.task_get_special_port(sample_setup.my_task, i32(darwin.Task_Port_Type.Bootstrap), &sample_setup.bootstrap_port) != .Success {
 			fmt.printf("failed to get special port\n")
 			return
 		}
 
 		right: darwin.mach_port_t
 		acquired_right: darwin.mach_port_t
-		if darwin.mach_port_extract_right(sample_setup.my_task, u32(sample_setup.recv_port), darwin.MACH_MSG_TYPE_MAKE_SEND, &right, &acquired_right) != 0 {
+		if darwin.mach_port_extract_right(sample_setup.my_task, u32(sample_setup.recv_port), u32(darwin.Msg_Type.Make_Send), &right, &acquired_right) != .Success {
 			fmt.printf("failed to get right\n")
 			return
 		}
 
 		k_err := darwin.bootstrap_register2(sample_setup.bootstrap_port, "SPALL_BOOTSTRAP", right, 0)
-		if k_err != 0 {
+		if k_err != .Success {
 			fmt.printf("failed to register bootstrap | got: %v\n", k_err)
 			return
 		}
@@ -407,7 +407,7 @@ sample_child :: proc(trace: ^Trace, program_name: string, path: string, args: []
 
 	envs[i] = fmt.tprintf("DYLD_INSERT_LIBRARIES=%s/tools/osx_dylib_sample/%s", dir, "same.dylib")
 
-	child_pid, err2 := os.spawnp(program_name, args, envs[:], nil, nil)
+	child_pid, err2 := spawn(program_name, args, envs[:], nil, nil, true)
 	if err2 != nil {
 		fmt.printf("failed to spawn: %s | %v\n", program_name, err2)
 		return
@@ -422,13 +422,13 @@ sample_child :: proc(trace: ^Trace, program_name: string, path: string, args: []
 
 	// Get the Child's task and port
 	recv_msg := Mach_Recv_Msg{}
-	if darwin.mach_msg(&recv_msg, darwin.MACH_RCV_MSG | darwin.MACH_RCV_TIMEOUT, 0, size_of(recv_msg), sample_setup.recv_port, initial_timeout, 0) != 0 {
+	if darwin.mach_msg(&recv_msg, {.Receive_Msg, .Receive_Timeout}, 0, size_of(recv_msg), sample_setup.recv_port, initial_timeout, 0) != .Success {
 		fmt.printf("failed to get child task\n")
 		return
 	}
 	child_task := recv_msg.task_port.name
 
-	if darwin.mach_msg(&recv_msg, darwin.MACH_RCV_MSG | darwin.MACH_RCV_TIMEOUT, 0, size_of(recv_msg), sample_setup.recv_port, initial_timeout, 0) != 0 {
+	if darwin.mach_msg(&recv_msg, {.Receive_Msg, .Receive_Timeout}, 0, size_of(recv_msg), sample_setup.recv_port, initial_timeout, 0) != .Success {
 		fmt.printf("failed to get child port\n")
 		return
 	}
@@ -438,14 +438,14 @@ sample_child :: proc(trace: ^Trace, program_name: string, path: string, args: []
 	send_msg := Mach_Send_Msg{}
 	send_msg.header.msgh_remote_port = child_port
 	send_msg.header.msgh_local_port = 0
-	send_msg.header.msgh_bits = darwin.MACH_MSG_TYPE_COPY_SEND | darwin.MACH_MSGH_BITS_COMPLEX
+	send_msg.header.msgh_bits = u32(darwin.Msg_Type.Copy_Send) | u32(darwin.Msg_Header_Bits.Complex)
 	send_msg.header.msgh_size = size_of(send_msg)
 
 	send_msg.body.msgh_descriptor_count = 1
 	send_msg.task_port.name = sample_setup.my_task
-	send_msg.task_port.disposition = darwin.MACH_MSG_TYPE_COPY_SEND
+	send_msg.task_port.disposition = u32(darwin.Msg_Type.Copy_Send)
 	send_msg.task_port.type = darwin.MACH_MSG_PORT_DESCRIPTOR
-	if darwin.mach_msg_send(&send_msg) != 0 {
+	if darwin.mach_msg_send(&send_msg) != .Success {
 		fmt.printf("failed to send all-clear to child\n")
 		return
 	}
@@ -612,3 +612,32 @@ sample_child :: proc(trace: ^Trace, program_name: string, path: string, args: []
 
 	return true
 }
+
+spawn :: #force_inline proc(path: string, args: []string, envs: []string, file_actions: rawptr, attributes: rawptr, is_spawnp: bool) -> (posix.pid_t, os.Error) {
+	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
+	path_cstr := strings.clone_to_cstring(path, context.temp_allocator)
+
+	args_cstrs := make([]cstring, len(args) + 2, context.temp_allocator)
+	args_cstrs[0] = strings.clone_to_cstring(path, context.temp_allocator)
+	for i := 0; i < len(args); i += 1 {
+		args_cstrs[i+1] = strings.clone_to_cstring(args[i], context.temp_allocator)
+	}
+
+	envs_cstrs := make([]cstring, len(envs) + 1, context.temp_allocator)
+	for i := 0; i < len(envs); i += 1 {
+		envs_cstrs[i] = strings.clone_to_cstring(envs[i], context.temp_allocator)
+	}
+
+	child_pid: posix.pid_t
+	status: posix.Errno
+	if is_spawnp {
+		status = posix.posix_spawnp(&child_pid, path_cstr, file_actions, attributes, raw_data(args_cstrs), raw_data(envs_cstrs))
+	} else {
+		status = posix.posix_spawn(&child_pid, path_cstr, file_actions, attributes, raw_data(args_cstrs), raw_data(envs_cstrs))
+	}
+	if status != .NONE {
+		return 0, os.Platform_Error(status)
+	}
+	return child_pid, nil
+}
+
