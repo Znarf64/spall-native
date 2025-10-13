@@ -1,3 +1,5 @@
+set -x
+
 if [[ "$1" == "" ]]; then
 	APP_PATH="./bin/spall.app"
 else
