@@ -83,7 +83,7 @@ jobs:
       - name: Build Spall
         run: |
           ./build.sh release
-          ./fix_dylib.sh bin/spall libSDL2-2.0.0.dylib
+          ./fix_dylib.sh libSDL2-2.0.0.dylib ./bin/spall
 
       - name: Upload Spall
         uses: actions/upload-artifact@v4
@@ -140,7 +140,7 @@ jobs:
       - name: Build Spall
         run: |
           ./build.sh release
-          ./fix_dylib.sh bin/spall libSDL2-2.0.0.dylib
+          ./fix_dylib.sh libSDL2-2.0.0.dylib ./bin/spall
 
       - name: Upload Spall
         uses: actions/upload-artifact@v4
