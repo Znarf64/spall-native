@@ -78,7 +78,7 @@ jobs:
           ./configure --prefix $(PWD)/out
           make -j
           make install
-          cp out/lib/libSDL2-2.0.0.dylib ../spall/bin/.
+          cp out/lib/libSDL2-2.0.0.dylib ../spall/.
         
       - name: Build Spall
         run: |
@@ -94,7 +94,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sdl2_osx_x86
-          path: bin/libSDL2-2.0.0.dylib
+          path: libSDL2-2.0.0.dylib
 
   build_osx_arm:
     name: OSX ARM Build and Test
@@ -134,7 +134,7 @@ jobs:
           ./configure --prefix $(PWD)/out
           make -j
           make install
-          cp out/lib/libSDL2-2.0.0.dylib ../spall/bin/.
+          cp out/lib/libSDL2-2.0.0.dylib ../spall/.
         
       - name: Build Spall
         run: |
@@ -150,7 +150,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sdl2_osx_arm
-          path: bin/libSDL2-2.0.0.dylib
+          path: libSDL2-2.0.0.dylib
 
   build_windows:
     name: Windows Build and Test
