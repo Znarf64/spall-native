@@ -4,7 +4,7 @@ import "core:fmt"
 import "core:slice"
 import "core:mem"
 import "core:encoding/json"
-import os "core:os/old"
+import "core:os"
 
 JSONState :: enum {
 	InvalidFile,
@@ -830,7 +830,7 @@ process_next_json_event :: proc(trace: ^Trace, jp: ^JSONParser, chunk: []u8) -> 
 	return
 }
 
-json_parse :: proc (trace: ^Trace, fd: os.Handle) -> bool {
+json_parse :: proc (trace: ^Trace, fd: ^os.File) -> bool {
 	p := &trace.parser
 	jp := init_json_parser()
 

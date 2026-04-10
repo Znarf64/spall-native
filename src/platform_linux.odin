@@ -1,8 +1,7 @@
 #+build linux
 package main
 
-import "core:sys/unix"
-import os "core:os/old"
+import "core:os"
 import "core:fmt"
 import "core:strings"
 import "core:strconv"
@@ -54,39 +53,19 @@ pointer_cursor: xlib.Cursor
 text_cursor: xlib.Cursor
 
 open_file_dialog :: proc() -> (string, bool) {
-	buffer := [4096]u8{}
-	fds := [2]os.Handle{}
-	ret := unix.sys_pipe2(raw_data(&fds), 0)
+	state, stdout, _, err := os.process_exec({
+		command = {
+			"zenity",
+			"--file-selection",
+		},
+	}, context.temp_allocator)
 
-	pid, err := os.fork()
-	if err != os.ERROR_NONE {
+	if err != nil || !state.success {
 		fmt.printf("Spall uses Zenity for file dialogs! Please install Zenity or launch your trace via the command line, ex: spall <trace>\n")
-		unix.sys_close(int(fds[0]))
-		unix.sys_close(int(fds[1]))
 		return "", false
 	}
 
-	if pid == 0 {
-		unix.sys_dup2(int(fds[1]), 1)
-		unix.sys_close(int(fds[1]))
-		unix.sys_close(int(fds[0]))
-		os.execvp("zenity", []string{"--file-selection"})
-		os.exit(1)
-	}
-	unix.sys_close(int(fds[1]))
-
-	for {
-		ret_bytes := unix.sys_read(int(fds[0]), raw_data(buffer[:]), len(buffer))
-		if ret_bytes > 0 {
-			unix.sys_close(int(fds[0]))
-			return strings.clone_from_bytes(buffer[:ret_bytes-1]), true
-		} else {
-			break
-		}
-	}
-
-	unix.sys_close(int(fds[0]))
-	return "", false
+	return strings.clone(strings.trim_space(string(stdout)), context.allocator), true
 }
 
 _normalize_key :: proc(v: xlib.KeySym) -> KeyType {

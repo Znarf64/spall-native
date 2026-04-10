@@ -6,7 +6,7 @@ _ :: runtime
 
 import "core:fmt"
 import "core:time"
-import os "core:os/old"
+import "core:os"
 import "core:strings"
 import "core:math"
 import "core:flags"

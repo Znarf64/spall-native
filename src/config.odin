@@ -2,7 +2,7 @@ package main
 
 import "base:runtime"
 
-import os "core:os/old"
+import "core:os"
 import "core:fmt"
 import "core:slice"
 import "core:bytes"
@@ -82,7 +82,7 @@ load_trace :: proc(loader: ^Loader, trace: ^Trace, ui_state: ^UIState, trace_nam
 
 real_pos :: proc(p: ^Parser) -> i64 { return p.pos }
 chunk_pos :: proc(p: ^Parser) -> i64 { return p.pos - p.offset }
-get_chunk :: proc(p: ^Parser, fd: os.Handle, chunk_buffer: []u8) -> (int, bool) {
+get_chunk :: proc(p: ^Parser, fd: ^os.File, chunk_buffer: []u8) -> (int, bool) {
 	rd_sz, err2 := os.read_at(fd, chunk_buffer, p.pos)
 	if err2 != nil {
 		return 0, false
@@ -547,8 +547,8 @@ load_symbols_task :: proc(pool: ^Pool, raw_args: rawptr) {
 load_executable :: proc(trace: ^Trace, file_name: string, base_addr: u64) -> bool {
 	fmt.printf("Loading symbols from %s\n", file_name)
 
-	exec_buffer, ok := os.read_entire_file_from_filename(file_name)
-	if !ok {
+	exec_buffer, err := os.read_entire_file(file_name, context.allocator)
+	if err != nil {
 		post_error(trace, "Failed to load symbols from %s!", file_name)
 		return false
 	}
@@ -577,8 +577,8 @@ load_executable :: proc(trace: ^Trace, file_name: string, base_addr: u64) -> boo
 		}
 
 		debug_file_name := guess_debug_path(file_name)
-		debug_buffer, ok2 := os.read_entire_file_from_filename(debug_file_name)
-		if !ok2 {
+		debug_buffer, err := os.read_entire_file(debug_file_name, context.allocator)
+		if err != nil {
 			post_error(trace, "No debug info found!")
 			return false
 		}
