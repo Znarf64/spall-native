@@ -1,14 +1,9 @@
 package main
 
-import "base:intrinsics"
-
 import "core:fmt"
-import "core:strings"
-import "core:slice"
-import "core:mem"
-import "core:os"
-import "core:math"
-import "formats:spall_fmt"
+import os "core:os/old"
+
+import "formats/spall_fmt"
 
 as_get_next_buffer :: proc(trace: ^Trace, chunk: []u8, buffer_header: ^spall_fmt.Auto_Buffer_Header) -> BinaryState {
 	p := &trace.parser
@@ -26,13 +21,13 @@ as_get_next_buffer :: proc(trace: ^Trace, chunk: []u8, buffer_header: ^spall_fmt
 }
 
 pull_uval :: #force_inline proc(buffer: []u8, size: int) -> u64 {
-    switch size {
-    case 1: return u64(((^u8)(raw_data(buffer)))^)
-    case 2: return u64(((^u16)(raw_data(buffer)))^)
-    case 4: return u64(((^u32)(raw_data(buffer)))^)
-    case 8: return u64(((^u64)(raw_data(buffer)))^)
-    }
-    return 0
+	switch size {
+	case 1: return u64(((^u8)(raw_data(buffer)))^)
+	case 2: return u64(((^u16)(raw_data(buffer)))^)
+	case 4: return u64(((^u32)(raw_data(buffer)))^)
+	case 8: return u64(((^u64)(raw_data(buffer)))^)
+	}
+	return 0
 }
 
 as_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, thread: ^Thread, current_time: ^i64, current_addr: ^u64, current_caller: ^u64) -> BinaryState {
@@ -43,12 +38,12 @@ as_parse_next_event :: proc(trace: ^Trace, chunk: []u8, process: ^Process, threa
 		return .PartialRead
 	}
 
-    data_start := chunk[chunk_pos(p):]
-    type_byte := ((^u8)(raw_data(data_start))^)
-    type_tag := type_byte >> 6
+	data_start := chunk[chunk_pos(p):]
+	type_byte  := ((^u8)(raw_data(data_start))^)
+	type_tag   := type_byte >> 6
 
-    i : i64 = 1
-    switch type_tag {
+	i : i64 = 1
+	switch type_tag {
 	case 0: // MicroBegin
 		dt_size     := i64(1 << ((0b00_11_00_00 & type_byte) >> 4))
 		addr_size   := i64(1 << ((0b00_00_11_00 & type_byte) >> 2))
@@ -261,9 +256,9 @@ as_parse :: proc(trace: ^Trace, fd: os.Handle, header_size: i64) -> bool {
 
 		buffer_end := p.pos + i64(buffer_header.size)
 
-        current_time   := i64(buffer_header.first_ts)
-        current_addr   := u64(0)
-        current_caller := u64(0)
+		current_time   := i64(buffer_header.first_ts)
+		current_addr   := u64(0)
+		current_caller := u64(0)
         //fmt.printf("starting new buffer for tid %d at %d\n", buffer_header.tid, current_time)
 		ev_loop: for p.pos < buffer_end {
 			state := as_parse_next_event(trace, full_chunk, process, thread, &current_time, &current_addr, &current_caller)

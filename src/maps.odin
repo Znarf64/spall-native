@@ -1,7 +1,5 @@
 package main
 
-import "base:runtime"
-import "core:fmt"
 import "core:hash"
 import "core:strings"
 import "core:slice"

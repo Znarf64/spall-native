@@ -1,7 +1,6 @@
 package main
 
 import "base:intrinsics"
-import "core:mem"
 import "core:math/rand"
 import "core:math"
 import "core:fmt"
@@ -30,7 +29,7 @@ push_fatal :: proc(err: SpallError, loc := #caller_location) -> ! {
 }
 
 rand_int :: proc(min, max: int) -> int {
-    return int(rand.int31()) % (max-min) + min
+	return int(rand.int31()) % (max-min) + min
 }
 
 split_u64 :: proc(x: u64) -> (u32, u32) {
@@ -101,7 +100,7 @@ ease_in :: proc(t: f32) -> f32 {
 	return 1 - math.cos((t * math.PI) / 2)
 }
 ease_in_out :: proc(t: f32) -> f32 {
-    return -(math.cos(math.PI * t) - 1) / 2
+	return -(math.cos(math.PI * t) - 1) / 2
 }
 
 ONE_DAY    :: 1000 * 1000 * 1000 * 60 * 60 * 24
@@ -508,11 +507,11 @@ trunc_string :: proc(str: string, pad, max_width: f64) -> string {
 }
 
 slice_to_type :: proc(buf: []u8, $T: typeid) -> (T, bool) #optional_ok {
-    if len(buf) < size_of(T) {
-        return {}, false
+	if len(buf) < size_of(T) {
+		return {}, false
     }
 
-    return intrinsics.unaligned_load((^T)(raw_data(buf))), true
+	return intrinsics.unaligned_load((^T)(raw_data(buf))), true
 }
 
 disp_time :: proc(trace: ^Trace, ts: f64) -> f64 {

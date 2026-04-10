@@ -36,8 +36,8 @@ Manual_Event_Type :: enum u8 {
 
 Auto_Event_Type :: enum u8 {
 	Invalid    = 0,
-    Begin      = 1,
-    End        = 2,
+	Begin      = 1,
+	End        = 2,
 }
 
 Auto_Buffer_Header :: struct #packed {

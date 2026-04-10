@@ -1,12 +1,10 @@
 package main
 
 import "core:fmt"
-import "core:strings"
 import "core:slice"
 import "core:mem"
-import "core:c"
 import "core:encoding/json"
-import "core:os"
+import os "core:os/old"
 
 JSONState :: enum {
 	InvalidFile,

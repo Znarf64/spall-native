@@ -1,11 +1,8 @@
 package main
 
 import "core:fmt"
-import "core:os"
+import os "core:os/old"
 import "core:bytes"
-import "core:slice"
-import "core:mem"
-import "core:math"
 
 /*
 Handy References:

@@ -1,15 +1,14 @@
 package main
 
-import "base:intrinsics"
 import "base:runtime"
+
+_ :: runtime
 
 import "core:fmt"
 import "core:time"
-import "core:os"
-import "core:mem"
+import os "core:os/old"
 import "core:strings"
 import "core:math"
-import "core:slice"
 import "core:flags"
 import "core:container/queue"
 import "core:container/lru"

@@ -5,6 +5,8 @@ import "core:sync"
 import "core:fmt"
 import "core:prof/spall"
 
+_ :: spall
+
 Pool_TaskProc :: proc(pool: ^Pool, data: rawptr)
 Pool_Task :: struct {
 	do_work: Pool_TaskProc,

@@ -2,17 +2,16 @@ package main
 
 import "base:runtime"
 
-import "core:os"
+import os "core:os/old"
 import "core:fmt"
 import "core:slice"
 import "core:bytes"
 import "core:time"
 import "core:path/filepath"
-import "core:mem"
 import "core:strings"
 import "core:container/lru"
 
-import "formats:spall_fmt"
+import "formats/spall_fmt"
 
 FileType :: enum {
 	Invalid,
@@ -714,7 +713,7 @@ load_spall_file :: proc(loader: ^Loader, trace: ^Trace, file_name: string) {
 			return
 		}
 
-        if hdr.version < 3 {
+		if hdr.version < 3 {
 			post_error(trace, "Support for auto-tracing v%d has been dropped in this version, please grab the new header!", hdr.version)
 			return
         }

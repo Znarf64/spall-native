@@ -1,11 +1,10 @@
 package main
 
 import "core:fmt"
-import "core:strings"
-import "core:slice"
 import "core:mem"
-import "core:os"
-import "formats:spall_fmt"
+import os "core:os/old"
+
+import "formats/spall_fmt"
 
 ms_v1_get_next_event :: proc(trace: ^Trace, chunk: []u8, temp_ev: ^TempEvent) -> BinaryState {
 	p := &trace.parser

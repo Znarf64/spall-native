@@ -1,16 +1,11 @@
 package main
 
-import "base:runtime"
 import "core:container/queue"
 import "core:time"
 import "core:fmt"
 import "core:math"
-import "core:slice"
 import "core:strings"
 import "core:unicode/utf8"
-import "core:os"
-
-import "core:prof/spall"
 
 to_world_x :: proc(cam: Camera, x: f64) -> f64 {
 	return (x - cam.pan.x) / cam.current_scale
@@ -238,7 +233,7 @@ draw_graph :: proc(gfx: ^GFX_Context, header: string, history: ^queue.Queue(f64)
 	graph_size: f64 = 150
 
 	max_val : f64 = 0
-	min_val : f64 = 1e5000
+	min_val : f64 = max(f64)
 	sum_val : f64 = 0
 	for i := 0; i < queue.len(history^); i += 1 {
 		entry := queue.get(history, i)
@@ -751,7 +746,7 @@ draw_flamegraphs :: proc(gfx: ^GFX_Context, trace: ^Trace, start_time, end_time:
 			cur_depth_off := 0
 			for &depth, d_idx in thread.depths {
 				tree := depth.tree
-                if len(depth.tree) == 0 { continue }
+				if len(depth.tree) == 0 { continue }
 
 				found_rid := -1
 				range_loop: for range, r_idx in trace.stats.selected_ranges {
@@ -1131,7 +1126,7 @@ draw_minimap :: proc(gfx: ^GFX_Context, trace: ^Trace, ui_state: ^UIState) {
 					}
 				}
 
-                if len(depth.tree) == 0 { continue }
+				if len(depth.tree) == 0 { continue }
 
 				y := tree_y + (mini_rect_height * f64(d_idx))
 

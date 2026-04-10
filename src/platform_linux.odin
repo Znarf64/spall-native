@@ -1,12 +1,10 @@
 #+build linux
 package main
 
-import "core:c"
 import "core:sys/unix"
-import "core:os"
+import os "core:os/old"
 import "core:fmt"
 import "core:strings"
-import "core:time"
 import "core:strconv"
 import "core:slice"
 
@@ -195,31 +193,24 @@ _normalize_key :: proc(v: xlib.KeySym) -> KeyType {
 	return .None
 }
 
-_get_dpi :: proc(x_display: ^xlib.Display) -> f32 {
-	dpi : f32 = 96
+_get_dpi :: proc(x_display: ^xlib.Display) -> (dpi: f32 = 96) {
 	rms := xlib.ResourceManagerString(x_display)
 	if rms == nil {
-		return dpi
+		return
 	}
 
 	db := xlib.XrmGetStringDatabase(rms)
 	if db == nil {
-		return dpi
+		return
 	}
 
 	type : cstring
 	value := xlib.XrmValue{}
 	if !xlib.XrmGetResource(db, "Xft.dpi", "Xft.Dpi", &type, &value) {
-		return dpi
+		return
 	}
 
-	dpi_str := string(cstring(value.addr))
-	dpi = f32(strconv.atof(dpi_str))
-	if dpi == 0 {
-		return 96
-	}
-
-	return dpi
+	return strconv.parse_f32(string(cstring(value.addr))) or_else dpi
 }
 
 _create_cursor :: proc(display: ^xlib.Display, name: cstring, theme: cstring, size: i32, fallback: xlib.CursorShape) -> xlib.Cursor {
@@ -227,7 +218,7 @@ _create_cursor :: proc(display: ^xlib.Display, name: cstring, theme: cstring, si
 	if theme != nil {
 		img := xlib.cursorLibraryLoadImage(name, theme, size)
 		if img != nil {
-			cursor := xlib.cursorImageLoadCursor(display, img)
+			cursor := xlib.cursorImageLoadCursor(display, (^xlib.CursorImage)(img))
 			xlib.cursorImageDestroy(img)
 			return cursor
 		}

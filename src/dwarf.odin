@@ -1,11 +1,8 @@
 package main
 
-import "core:os"
 import "core:fmt"
 import "core:strings"
 import "core:slice"
-import "core:encoding/varint"
-import "core:reflect"
 
 Sections :: struct {
 	debug_str:   []u8,
